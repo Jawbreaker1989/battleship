@@ -11,13 +11,18 @@ import java.util.logging.Logger;
  */
 public class ClientMain {
     private static final Logger LOGGER = Logger.getLogger(ClientMain.class.getName());
-    private static final String DEFAULT_HOST = "localhost";
+    private static final String DEFAULT_HOST = "68.211.112.149"; // IP pública del servidor Azure
     private static final int DEFAULT_PORT = 1099; // Puerto estándar del RMI Registry
 
     public static void main(String[] args) {
         // Obtener parámetros de conexión
-        // Prioridad de origen: args > system properties > env vars > default
-        String tmpHost = DEFAULT_HOST;
+        // Prioridad de origen: args > system properties > env vars > default (Azure IP)
+        // CONFIGURACIÓN PARA CLIENTES REMOTOS: Por defecto conecta a Azure VM
+        String tmpHost = DEFAULT_HOST; // Ahora por defecto es la IP de Azure
+        String publicIp = System.getenv("BATTLESHIP_PUBLIC_IP");
+        if (publicIp != null && !publicIp.isBlank()) {
+            tmpHost = publicIp.trim();
+        }
         String portStr = String.valueOf(DEFAULT_PORT);
 
         if (System.getenv("BATTLESHIP_HOST") != null)

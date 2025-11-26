@@ -23,11 +23,27 @@ public class ServerMain {
             System.out.println("🚀 Iniciando Servidor de Batalla Naval Distribuido (LAN/WAN) ...\n");
 
             // 1. Determinar host e IP
+            // Prioridad: args[0] > env BATTLESHIP_PUBLIC_IP > AZURE_PUBLIC_IP > 0.0.0.0
+            // (escucha en todas las interfaces)
+            // CONFIGURACIÓN PARA AZURE VM: Por defecto escucha en todas las interfaces y
+            // usa IP pública de Azure
+            final String AZURE_PUBLIC_IP = "68.211.112.149"; // IP pública de Azure VM
+
             String argHost = (args.length > 0 && !args[0].isBlank()) ? args[0].trim() : null;
-            String detected = detectLanIp();
-            String host = (argHost != null) ? argHost : (detected != null ? detected : "localhost");
+            String envHost = System.getenv("BATTLESHIP_PUBLIC_IP");
+            if (envHost != null && envHost.isBlank()) {
+                envHost = null;
+            }
+
+            // Para Azure: usar la IP pública de Azure por defecto
+            String host = (argHost != null) ? argHost : (envHost != null ? envHost : AZURE_PUBLIC_IP);
 
             // 2. Propiedades RMI
+            // Preferir IPv4 (evita problemas con IPv6 en entornos cloud)
+            System.setProperty("java.net.preferIPv4Stack", "true");
+
+            // Configurar hostname que expondrá el stub RMI (IMPORTANTE para clientes
+            // remotos)
             System.setProperty("java.rmi.server.hostname", host);
             System.setProperty("java.security.policy", "all.policy");
             System.setProperty("sun.rmi.transport.tcp.responseTimeout", "10000");
