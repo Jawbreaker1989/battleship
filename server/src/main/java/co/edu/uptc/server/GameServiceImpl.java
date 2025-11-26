@@ -241,8 +241,8 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
     }
 
     /**
-     * Restringe conexiones a LOCAL + LAN únicamente
-     * Permite: localhost (127.0.0.1) + rangos privados (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+     * Permite conexiones desde cualquier lugar (LOCAL + LAN + INTERNET/AZURE)
+     * Optimizado para jugar con amigos en diferentes ciudades
      */
     private void enforceLanOnly() throws RemoteException {
         try {
@@ -250,36 +250,12 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
             InetAddress addr = InetAddress.getByName(host);
             String ip = addr.getHostAddress();
             
-            if (!isPrivateIp(ip)) {
-                LOGGER.warning("Conexión RECHAZADA - Fuera de red permitida: " + ip);
-                throw new RemoteException("Acceso restringido: Solo LOCAL + LAN permitidas");
-            } else {
-                LOGGER.info("Conexión ACEPTADA desde: " + ip + " (LOCAL/LAN válida)");
-            }
-        } catch (RemoteException re) {
-            throw re;
+            LOGGER.info("✅ Conexión ACEPTADA desde: " + ip);
+            // Permitir cualquier conexión válida (LOCAL, LAN, AZURE, Internet)
+            
         } catch (Exception e) {
             throw new RemoteException("No se pudo validar origen", e);
         }
-    }
-
-    private boolean isPrivateIp(String ip) {
-        // Permitir conexiones locales (mismo equipo)
-        if (ip.equals("127.0.0.1") || ip.equals("localhost")) return true;
-        
-        // Permitir conexiones LAN privadas
-        if (ip.startsWith("192.168.")) return true;
-        if (ip.startsWith("10.")) return true;
-        if (ip.startsWith("172.")) {
-            try {
-                int second = Integer.parseInt(ip.split("\\.")[1]);
-                return second >= 16 && second <= 31;
-            } catch (Exception ignored) {}
-        }
-        
-        // Log para depuración
-        LOGGER.info("IP evaluada: " + ip + " (permitida: LOCAL y LAN únicamente)");
-        return false;
     }
     
     @Override

@@ -1,0 +1,64 @@
+# 🎮 BATALLA NAVAL DISTRIBUIDA - GUÍA SIMPLE
+
+## Para Tu Amigo en Otra Ciudad
+
+### 📦 Archivos Necesarios
+Descarga estos 3 archivos en una carpeta:
+```
+✓ client-1.0-SNAPSHOT.jar
+✓ shared-1.0-SNAPSHOT.jar
+✓ JUGAR_AMIGO.bat
+```
+
+### 🚀 Cómo Jugar
+
+1. **Edita JUGAR_AMIGO.bat**
+   - Abre con Notepad
+   - Cambia `set SERVIDOR_IP=68.211.112.149` por la IP correcta
+   - Guarda
+
+2. **Haz doble click en JUGAR_AMIGO.bat**
+   - Se abrirá una ventana
+   - Espera a que diga "Conectado al servidor"
+
+3. **Listo**
+   - Cuando ambos estén conectados, podrán jugar
+
+### ⚠️ Problemas Comunes
+
+**"Connection refused"**
+- Verifica que la IP del servidor sea correcta
+- Asegúrate que el servidor está ejecutándose
+
+**"java: command not found"**
+- Instala Java desde: https://www.oracle.com/java/technologies/downloads/
+- Reinicia la computadora después de instalar
+
+**La ventana se cierra rápidamente**
+- Hay un error con los archivos JAR
+- Verifica que ambos están en la misma carpeta
+
+### 📋 Lo Que Necesitas Saber
+
+- El servidor coordina el juego entre ambos jugadores
+- La IP es la dirección del servidor (dónde está corriendo el servidor)
+- El puerto siempre es 1100
+- La conexión es P2P a través del servidor RMI
+
+### 🎮 Controles del Juego
+
+1. **Colocar barcos**: Click izquierdo en el tablero de la izquierda
+2. **Atacar**: Click izquierdo en el tablero de la derecha (cuando sea tu turno)
+3. **Rendirse**: Botón "Rendirse" si quieres abandonar
+4. **Nueva partida**: Después de ganar/perder puedes jugar de nuevo
+
+### 📊 Estadísticas
+
+El juego guarda:
+- Partidas ganadas
+- Partidas perdidas
+- Promedio de golpes acertados
+
+---
+
+**¿Preguntas?** Contacta a quien te envió estos archivos.
