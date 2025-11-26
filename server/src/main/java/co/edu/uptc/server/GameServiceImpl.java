@@ -3,96 +3,122 @@ package co.edu.uptc.server;
 import co.edu.uptc.shared.interfaces.GameService;
 import co.edu.uptc.shared.interfaces.GameCallback;
 import co.edu.uptc.shared.model.*;
+
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.Map;
+import java.rmi.server.RemoteServer;
 import java.net.InetAddress;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
  * Implementación del servicio RMI de Batalla Naval
- * Demuestra servidor distribuido que coordina múltiples clientes
+ * Versión tolerante a fallos de red/firewall, callbacks asincrónicos.
  */
 public class GameServiceImpl extends UnicastRemoteObject implements GameService {
+    private static final long serialVersionUID = 1L;
+
     private static final Logger LOGGER = Logger.getLogger(GameServiceImpl.class.getName());
-    
-    // Estructuras thread-safe para sistema distribuido
+
+    // Estructuras thread-safe
     private final Map<String, Player> players;
     private final Map<String, GameSession> playerToSession;
     private final Map<String, Long> playerLastSeen;
     private final Map<String, String> pendingNewGameRequests;
-    // Buffer de gracia para reconexión antes de eliminar por completo un jugador
-    private static final long HARD_TIMEOUT_MS = 90000; // 90s eliminación definitiva
-    private static final long SOFT_TIMEOUT_MS = 30000; // 30s considerado inactivo
+
+    // Timeouts (milisegundos)
+    private static final long HARD_TIMEOUT_MS = 90_000L; // 90s eliminación definitiva
+    private static final long SOFT_TIMEOUT_MS = 30_000L; // 30s considerado inactivo
+
     private GameSession currentSession;
     private final AtomicInteger playerCounter;
+
     private final ScheduledExecutorService heartbeatExecutor;
-    
-    public GameServiceImpl() throws RemoteException {
-        super();
+    private final ExecutorService callbackExecutor;
+
+    public GameServiceImpl(int port) throws RemoteException {
+        super(port); // Exporta en puerto fijo para evitar bloqueos de firewall
         this.players = new ConcurrentHashMap<>();
         this.playerToSession = new ConcurrentHashMap<>();
         this.playerLastSeen = new ConcurrentHashMap<>();
         this.pendingNewGameRequests = new ConcurrentHashMap<>();
         this.playerCounter = new AtomicInteger(1);
-        this.heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
-        
-        // Iniciar monitoreo de conexiones
+
+        this.heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "heartbeat-monitor");
+            t.setDaemon(true);
+            return t;
+        });
+        this.callbackExecutor = Executors.newFixedThreadPool(4, r -> {
+            Thread t = new Thread(r, "callback-worker");
+            t.setDaemon(true);
+            return t;
+        });
+
         startConnectionMonitoring();
-        
+
         LOGGER.info("Servicio RMI de Batalla Naval inicializado con monitoreo de conexiones");
     }
-    
+
     @Override
     public synchronized String joinGame(String playerName, GameCallback callback) throws RemoteException {
+        // Se acepta la conexión (enforceLanOnly no bloquea aquí para facilitar juego
+        // WAN)
         enforceLanOnly();
+
         LOGGER.info("Solicitud de conexión de jugador: " + playerName);
-        
-    String playerId = "player_" + playerCounter.getAndIncrement();
-    Player player = new Player(playerId, playerName, callback);
-        
+
+        String playerId = "player_" + playerCounter.getAndIncrement();
+        Player player = new Player(playerId, playerName, callback);
+
         players.put(playerId, player);
         playerLastSeen.put(playerId, System.currentTimeMillis());
-        
-        // Buscar o crear sesión de juego distribuida
-    GameSession session = findOrCreateSession();
-    boolean added = session.addPlayer(player);
-        
+
+        GameSession session = findOrCreateSession();
+        boolean added = session.addPlayer(player);
+
         if (added) {
             playerToSession.put(playerId, session);
             LOGGER.info("Jugador " + playerName + " (" + playerId + ") conectado al sistema distribuido");
-            
-            // Notificar al jugador sobre el estado actual
-            try {
-                callback.onGameEvent("Conectado al servidor. Esperando oponente...");
-            } catch (RemoteException e) {
-                LOGGER.warning("Error notificando conexión a " + playerId + ": " + e.getMessage());
-            }
-            
-            // Retornar en formato esperado por el cliente
+
+            // Notificar asincrónicamente, tolerando fallos (firewall/NAT)
+            callbackExecutor.execute(() -> {
+                try {
+                    Thread.sleep(500); // darle tiempo al cliente para terminar init UI
+                    callback.onGameEvent("Conectado al servidor. Esperando oponente...");
+                } catch (RemoteException re) {
+                    LOGGER.warning(
+                            "Error notificando conexión a " + playerId + " (RemoteException): " + re.getMessage());
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                } catch (Exception ex) {
+                    LOGGER.warning("Error notificando conexión a " + playerId + ": " + ex.getMessage());
+                }
+            });
+
             return "SUCCESS:" + playerId + ":" + session.getSessionId();
         } else {
-            // No se pudo añadir
             players.remove(playerId);
             throw new RemoteException("No se pudo unir al juego - Servidor lleno");
         }
     }
-    
+
     @Override
     public boolean placeShip(String playerId, Position start, Position end) throws RemoteException {
         LOGGER.info("Solicitud colocar barco de " + playerId + ": " + start + " a " + end);
-        
+
         GameSession session = playerToSession.get(playerId);
         if (session == null) {
             LOGGER.warning("Sesión no encontrada para jugador: " + playerId);
             return false;
         }
-        
+
         try {
             touchPlayer(playerId);
             return session.placeShip(playerId, start, end);
@@ -101,16 +127,16 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
             return false;
         }
     }
-    
+
     @Override
     public String attack(String playerId, Position target) throws RemoteException {
         LOGGER.info("Ataque de " + playerId + " a posición " + target);
-        
+
         GameSession session = playerToSession.get(playerId);
         if (session == null) {
             return "ERROR_SESSION";
         }
-        
+
         try {
             touchPlayer(playerId);
             Board.AttackResult result = session.attack(playerId, target);
@@ -123,7 +149,7 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
             return "ERROR";
         }
     }
-    
+
     @Override
     public GameStatus getGameStatus(String playerId) throws RemoteException {
         GameSession session = playerToSession.get(playerId);
@@ -133,34 +159,32 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
         touchPlayer(playerId);
         return session.getGameStatus(playerId);
     }
-    
+
     @Override
     public boolean setPlayerReady(String playerId) throws RemoteException {
         LOGGER.info("Jugador " + playerId + " marcado como listo (solicitud)");
         playerLastSeen.put(playerId, System.currentTimeMillis());
         GameSession session = playerToSession.get(playerId);
-        if (session == null) return false;
+        if (session == null)
+            return false;
         touchPlayer(playerId);
         return session.markPlayerReady(playerId);
     }
-    
+
     @Override
     public void disconnectPlayer(String playerId) throws RemoteException {
         LOGGER.info("Desconectando jugador: " + playerId);
-        
+
         Player player = players.get(playerId);
         if (player != null) {
             players.remove(playerId);
             playerToSession.remove(playerId);
             playerLastSeen.remove(playerId);
-            
+
             LOGGER.info("Jugador " + player.getName() + " (" + playerId + ") desconectado del sistema distribuido");
         }
     }
-    
-    /**
-     * Método de heartbeat para verificar conexiones
-     */
+
     public boolean ping(String playerId) throws RemoteException {
         if (players.containsKey(playerId)) {
             playerLastSeen.put(playerId, System.currentTimeMillis());
@@ -169,11 +193,7 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
         }
         return false;
     }
-    
-    /**
-     * Busca una sesión disponible o crea una nueva
-     * Maneja la coordinación de sesiones en el sistema distribuido
-     */
+
     private GameSession findOrCreateSession() {
         if (currentSession == null || currentSession.isFull()) {
             String sessionId = "session_" + System.currentTimeMillis();
@@ -182,40 +202,43 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
         }
         return currentSession;
     }
-    
-    /**
-     * Obtiene estadísticas del servidor distribuido
-     */
+
     public String getServerStats() {
-        return String.format("Jugadores conectados: %d, Sesiones activas: %d", 
-                           players.size(), 
-                           currentSession != null ? 1 : 0);
+        return String.format("Jugadores conectados: %d, Sesiones activas: %d",
+                players.size(),
+                currentSession != null ? 1 : 0);
     }
-    
-    /**
-     * Inicia el monitoreo de conexiones
-     */
+
     private void startConnectionMonitoring() {
         heartbeatExecutor.scheduleAtFixedRate(() -> {
             long currentTime = System.currentTimeMillis();
-            // Fase 1: marcar inactivos suaves (no eliminación inmediata de sesión)
+
+            // Notificar inactivos suavemente (asincrónico, silencioso)
             players.values().forEach(p -> {
                 long idle = currentTime - p.getLastActivity();
                 if (idle > SOFT_TIMEOUT_MS) {
-                    // Notificar solo una vez cada ciclo largo
-                    try {
-                        p.getCallback().onGameEvent("Conexión lenta detectada para " + p.getName() + " (reintentando)...");
-                    } catch (Exception ignored) {}
+                    callbackExecutor.execute(() -> {
+                        try {
+                            p.getCallback()
+                                    .onGameEvent("Conexión lenta detectada para " + p.getName() + " (reintentando)...");
+                        } catch (Exception ignored) {
+                            // Silenciar errores (firewall/NAT)
+                        }
+                    });
                 }
             });
 
-            // Fase 2: eliminación dura tras HARD_TIMEOUT_MS
+            // Eliminación dura
             playerLastSeen.entrySet().removeIf(entry -> {
                 String playerId = entry.getKey();
                 long lastSeen = entry.getValue();
                 if (currentTime - lastSeen > HARD_TIMEOUT_MS) {
                     LOGGER.warning("Jugador " + playerId + " eliminado por inactividad prolongada");
-                    try { disconnectPlayer(playerId); } catch (RemoteException e) { LOGGER.warning("Error desconectando (hard): " + e.getMessage()); }
+                    try {
+                        disconnectPlayer(playerId);
+                    } catch (RemoteException e) {
+                        LOGGER.warning("Error desconectando (hard): " + e.getMessage());
+                    }
                     return true;
                 }
                 return false;
@@ -232,155 +255,122 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
     }
 
     /**
-     * Restringe conexiones a LOCAL + LAN únicamente
-     * Permite: localhost (127.0.0.1) + rangos privados (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+     * Acepta conexiones desde Internet (no bloquea), pero registra origen.
      */
     private void enforceLanOnly() throws RemoteException {
         try {
-            String host = java.rmi.server.RemoteServer.getClientHost();
+            String host = RemoteServer.getClientHost();
             InetAddress addr = InetAddress.getByName(host);
             String ip = addr.getHostAddress();
-            
-            if (!isPrivateIp(ip)) {
-                LOGGER.warning("Conexión RECHAZADA - Fuera de red permitida: " + ip);
-                throw new RemoteException("Acceso restringido: Solo LOCAL + LAN permitidas");
-            } else {
-                LOGGER.info("Conexión ACEPTADA desde: " + ip + " (LOCAL/LAN válida)");
-            }
-        } catch (RemoteException re) {
-            throw re;
+
+            LOGGER.info("✅ Conexión ACEPTADA desde: " + ip);
+            // No bloquear; registro y auditoría
         } catch (Exception e) {
             throw new RemoteException("No se pudo validar origen", e);
         }
     }
 
-    private boolean isPrivateIp(String ip) {
-        // Permitir conexiones locales (mismo equipo)
-        if (ip.equals("127.0.0.1") || ip.equals("localhost")) return true;
-        
-        // Permitir conexiones LAN privadas
-        if (ip.startsWith("192.168.")) return true;
-        if (ip.startsWith("10.")) return true;
-        if (ip.startsWith("172.")) {
-            try {
-                int second = Integer.parseInt(ip.split("\\.")[1]);
-                return second >= 16 && second <= 31;
-            } catch (Exception ignored) {}
-        }
-        
-        // Log para depuración
-        LOGGER.info("IP evaluada: " + ip + " (permitida: LOCAL y LAN únicamente)");
-        return false;
-    }
-    
     @Override
     public boolean surrenderGame(String playerId) throws RemoteException {
         LOGGER.info("Jugador " + playerId + " se rinde");
-        
+
         Player player = players.get(playerId);
         if (player == null) {
             LOGGER.warning("Jugador no encontrado para rendición: " + playerId);
             return false;
         }
-        
+
         GameSession session = playerToSession.get(playerId);
         if (session == null) {
             LOGGER.warning("Sesión no encontrada para rendición: " + playerId);
             return false;
         }
-        
+
         try {
             touchPlayer(playerId);
-            
-            // Obtener el oponente
+
             String opponentId = session.getOpponentId(playerId);
             Player opponent = players.get(opponentId);
-            
+
             if (opponent != null) {
-                // Actualizar estadísticas
                 player.addLoss();
                 opponent.addWin();
-                
-                // Finalizar estadísticas detalladas del juego
-                player.endGame(false); // perdedor por rendición
-                opponent.endGame(true); // ganador por rendición del oponente
-                
-                // Notificar resultado
-                try {
-                    player.getCallback().onGameEvent("Te has rendido. Has perdido la partida.");
-                    opponent.getCallback().onGameEvent("¡Victoria! Tu oponente se ha rendido.");
-                    
-                    // Notificar fin del juego para activar estadísticas
-                    player.getCallback().onGameEnded(opponent.getName());
-                    opponent.getCallback().onGameEnded(opponent.getName());
-                } catch (RemoteException e) {
-                    LOGGER.warning("Error notificando rendición: " + e.getMessage());
-                }
-                
-                LOGGER.info("Partida terminada por rendición: " + player.getName() + " se rindió, ganó " + opponent.getName());
+
+                player.endGame(false);
+                opponent.endGame(true);
+
+                // Notificaciones asincrónicas tolerantes a fallos
+                callbackExecutor.execute(() -> {
+                    try {
+                        player.getCallback().onGameEvent("Te has rendido. Has perdido la partida.");
+                        opponent.getCallback().onGameEvent("¡Victoria! Tu oponente se ha rendido.");
+                        player.getCallback().onGameEnded(opponent.getName());
+                        opponent.getCallback().onGameEnded(opponent.getName());
+                    } catch (Exception ignored) {
+                        // Silenciar errores
+                    }
+                });
+
+                LOGGER.info("Partida terminada por rendición: " + player.getName() + " se rindió, ganó "
+                        + opponent.getName());
             }
-            
+
             return true;
-            
+
         } catch (Exception e) {
             LOGGER.severe("Error procesando rendición: " + e.getMessage());
             return false;
         }
     }
-    
+
     @Override
     public boolean requestNewGame(String playerId) throws RemoteException {
         LOGGER.info("Jugador " + playerId + " solicita nueva partida");
-        
+
         Player player = players.get(playerId);
         if (player == null) {
             LOGGER.warning("Jugador no encontrado para nueva partida: " + playerId);
             return false;
         }
-        
+
         GameSession session = playerToSession.get(playerId);
         if (session == null) {
             LOGGER.warning("Sesión no encontrada para nueva partida: " + playerId);
             return false;
         }
-        
+
         try {
             touchPlayer(playerId);
-            
-            // Obtener el oponente
+
             String opponentId = session.getOpponentId(playerId);
             Player opponent = players.get(opponentId);
-            
+
             if (opponent != null) {
-                // Registrar la solicitud pendiente
                 pendingNewGameRequests.put(opponentId, playerId);
-                
-                // Enviar solicitud de confirmación al oponente
-                try {
-                    opponent.getCallback().onNewGameRequest(player.getName());
-                    
-                    // Notificar al solicitante que se envió la solicitud
-                    player.getCallback().onGameEvent(
-                        "📤 Solicitud de revancha enviada a " + opponent.getName() + 
-                        ". Esperando respuesta..."
-                    );
-                    
-                    LOGGER.info("Solicitud de nueva partida enviada de " + player.getName() + " a " + opponent.getName());
-                } catch (RemoteException e) {
-                    LOGGER.warning("Error enviando solicitud al oponente: " + e.getMessage());
-                    pendingNewGameRequests.remove(opponentId); // Limpiar solicitud fallida
-                    return false;
-                }
+
+                // Enviar solicitud de confirmación al oponente (asincrónico)
+                callbackExecutor.execute(() -> {
+                    try {
+                        opponent.getCallback().onNewGameRequest(player.getName());
+                        player.getCallback().onGameEvent("📤 Solicitud de revancha enviada a " + opponent.getName()
+                                + ". Esperando respuesta...");
+                        LOGGER.info("Solicitud de nueva partida enviada de " + player.getName() + " a "
+                                + opponent.getName());
+                    } catch (Exception e) {
+                        LOGGER.warning("Error enviando solicitud al oponente: " + e.getMessage());
+                        pendingNewGameRequests.remove(opponentId);
+                    }
+                });
             }
-            
+
             return true;
-            
+
         } catch (Exception e) {
             LOGGER.severe("Error solicitando nueva partida: " + e.getMessage());
             return false;
         }
     }
-    
+
     @Override
     public String getPlayerStats(String playerId) throws RemoteException {
         Player player = players.get(playerId);
@@ -388,103 +378,95 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
             LOGGER.warning("Jugador no encontrado para estadísticas: " + playerId);
             return "0:0";
         }
-        
+
         touchPlayer(playerId);
         String stats = player.getStatsString();
         LOGGER.info("Estadísticas de " + player.getName() + ": " + stats);
         return stats;
     }
-    
+
     @Override
     public boolean respondToNewGameRequest(String playerId, boolean accepts) throws RemoteException {
-        LOGGER.info("Jugador " + playerId + " responde a solicitud de nueva partida: " + (accepts ? "ACEPTA" : "RECHAZA"));
-        
+        LOGGER.info(
+                "Jugador " + playerId + " responde a solicitud de nueva partida: " + (accepts ? "ACEPTA" : "RECHAZA"));
+
         Player responder = players.get(playerId);
         if (responder == null) {
             LOGGER.warning("Jugador no encontrado para responder solicitud: " + playerId);
             return false;
         }
-        
-        // Verificar si hay una solicitud pendiente para este jugador
+
         String requesterId = pendingNewGameRequests.remove(playerId);
         if (requesterId == null) {
             LOGGER.warning("No hay solicitud pendiente para jugador: " + playerId);
             return false;
         }
-        
+
         Player requester = players.get(requesterId);
         if (requester == null) {
             LOGGER.warning("Solicitante no encontrado: " + requesterId);
             return false;
         }
-        
+
         try {
             touchPlayer(playerId);
-            
+
             if (accepts) {
-                // Ambos jugadores aceptan, iniciar nueva partida
                 GameSession session = playerToSession.get(playerId);
                 if (session != null) {
-                    // Resetear la sesión
                     session.resetForNewGame();
-                    
-                    // Resetear jugadores manteniendo estadísticas
+
                     requester.resetForNewGame();
                     responder.resetForNewGame();
-                    
-                    // Notificar a ambos jugadores
-                    try {
-                        requester.getCallback().onGameEvent("✅ ¡Revancha aceptada! Nueva partida iniciada. Coloca tus barcos.");
-                        responder.getCallback().onGameEvent("✅ ¡Nueva partida iniciada! Coloca tus barcos.");
-                        
-                        LOGGER.info("Nueva partida iniciada entre " + requester.getName() + " y " + responder.getName());
-                    } catch (RemoteException e) {
-                        LOGGER.warning("Error notificando nueva partida: " + e.getMessage());
-                    }
+
+                    // Notificaciones asincrónicas tolerantes a fallos
+                    callbackExecutor.execute(() -> {
+                        try {
+                            requester.getCallback()
+                                    .onGameEvent("✅ ¡Revancha aceptada! Nueva partida iniciada. Coloca tus barcos.");
+                            responder.getCallback().onGameEvent("✅ ¡Nueva partida iniciada! Coloca tus barcos.");
+                            LOGGER.info("Nueva partida iniciada entre " + requester.getName() + " y "
+                                    + responder.getName());
+                        } catch (Exception ignored) {
+                            // Silenciar errores
+                        }
+                    });
                 }
             } else {
-                // Solicitud rechazada
-                try {
-                    requester.getCallback().onGameEvent("❌ Tu solicitud de revancha fue rechazada por " + responder.getName());
-                    responder.getCallback().onGameEvent("❌ Revancha rechazada.");
-                    
-                    LOGGER.info("Solicitud de nueva partida rechazada por " + responder.getName());
-                } catch (RemoteException e) {
-                    LOGGER.warning("Error notificando rechazo: " + e.getMessage());
-                }
+                callbackExecutor.execute(() -> {
+                    try {
+                        requester.getCallback()
+                                .onGameEvent("❌ Tu solicitud de revancha fue rechazada por " + responder.getName());
+                        responder.getCallback().onGameEvent("❌ Revancha rechazada.");
+                        LOGGER.info("Solicitud de nueva partida rechazada por " + responder.getName());
+                    } catch (Exception ignored) {
+                        // Silenciar errores
+                    }
+                });
             }
-            
+
             return true;
-            
+
         } catch (Exception e) {
             LOGGER.severe("Error procesando respuesta a nueva partida: " + e.getMessage());
             return false;
         }
     }
-    
-    /**
-     * Obtiene las estadísticas actuales del juego para un jugador
-     * @param playerId ID del jugador
-     * @return GameStats con las estadísticas actuales
-     */
+
+    // Métodos de consulta adicionales (estadísticas/oponente)
     public GameStats getGameStats(String playerId) throws RemoteException {
         Player player = players.get(playerId);
-        if (player == null) {
+        if (player == null)
             return null;
-        }
         return player.getCurrentGameStats();
     }
-    
-    /**
-     * Obtiene las estadísticas del oponente de un jugador
-     * @param playerId ID del jugador
-     * @return GameStats del oponente o null si no se encuentra
-     */
+
     public GameStats getOpponentStats(String playerId) throws RemoteException {
         GameSession session = playerToSession.get(playerId);
-        if (session == null) {
+        if (session == null)
             return null;
-        }
-        return session.getOpponentStats(playerId);
+        return session.
+
+                getOpponentStats(playerId);
     }
 }

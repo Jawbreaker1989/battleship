@@ -14,20 +14,16 @@ import java.util.logging.Logger;
  */
 public class ServerMain {
     private static final Logger LOGGER = Logger.getLogger(ServerMain.class.getName());
-    private static final int DEFAULT_PORT = 1100;
+    private static final int REGISTRY_PORT = 1099;
+    private static final int SERVICE_PORT = 1100;
     private static final String SERVICE_NAME = "GameService";
-    
+
     public static void main(String[] args) {
         try {
-            System.out.println("🚀 Iniciando Servidor de Batalla Naval Distribuido (LAN) ...\n");
+            System.out.println("🚀 Iniciando Servidor de Batalla Naval Distribuido (LAN/WAN) ...\n");
 
-            // 1. Determinar host e IP LAN (solo subred privada)
+            // 1. Determinar host e IP
             String argHost = (args.length > 0 && !args[0].isBlank()) ? args[0].trim() : null;
-            String argPort = (args.length > 1 && !args[1].isBlank()) ? args[1].trim() : null;
-            int port = DEFAULT_PORT;
-            if (argPort != null) {
-                try { port = Integer.parseInt(argPort); } catch (NumberFormatException ignored) {}
-            }
             String detected = detectLanIp();
             String host = (argHost != null) ? argHost : (detected != null ? detected : "localhost");
 
@@ -37,18 +33,20 @@ public class ServerMain {
             System.setProperty("sun.rmi.transport.tcp.responseTimeout", "10000");
             System.setProperty("sun.rmi.transport.tcp.readTimeout", "10000");
 
-            // 3. Crear servicio
-            GameServiceImpl gameService = new GameServiceImpl();
-            System.out.println("✅ Servicio de juego creado");
+            // 3. Crear servicio en puerto FIJO (1100)
+            // Esto es CRÍTICO para Azure/Firewalls: el objeto exportado debe tener puerto
+            // fijo
+            GameServiceImpl gameService = new GameServiceImpl(SERVICE_PORT);
+            System.out.println("✅ Servicio de juego creado en puerto fijo: " + SERVICE_PORT);
 
-            // 4. Crear / obtener registry
+            // 4. Crear / obtener registry en puerto estándar (1099)
             Registry registry;
             try {
-                registry = LocateRegistry.createRegistry(port);
-                System.out.println("✅ Registry creado en puerto " + port);
+                registry = LocateRegistry.createRegistry(REGISTRY_PORT);
+                System.out.println("✅ Registry creado en puerto " + REGISTRY_PORT);
             } catch (ExportException ee) {
-                registry = LocateRegistry.getRegistry(port);
-                System.out.println("ℹ️  Registry existente reutilizado en puerto " + port);
+                registry = LocateRegistry.getRegistry(REGISTRY_PORT);
+                System.out.println("ℹ️  Registry existente reutilizado en puerto " + REGISTRY_PORT);
             }
 
             // 5. Publicar (rebind para idempotencia)
@@ -57,18 +55,21 @@ public class ServerMain {
 
             // 6. Información
             System.out.println("\n╔═══════════════════════════════════════════════════════╗");
-            System.out.println("║        SERVIDOR BATALLA NAVAL DISTRIBUIDO (LAN)       ║");
+            System.out.println("║      SERVIDOR BATALLA NAVAL DISTRIBUIDO (OPTIMIZADO)  ║");
             System.out.println("╠═══════════════════════════════════════════════════════╣");
-            System.out.printf ("║ 🌐 Host/IP: %-43s║%n", host);
-            System.out.printf ("║ 🔌 Puerto RMI: %-40d║%n", port);
-            System.out.printf ("║ 📡 Servicio: %-41s║%n", SERVICE_NAME);
+            System.out.printf("║ 🌐 Host/IP: %-43s║%n", host);
+            System.out.printf("║ 🔌 Puerto Registry: %-35d║%n", REGISTRY_PORT);
+            System.out.printf("║ 🔌 Puerto Servicio: %-35d║%n", SERVICE_PORT);
+            System.out.printf("║ 📡 Servicio: %-41s║%n", SERVICE_NAME);
             System.out.println("║ 🎮 Capacidad: 2 jugadores simultáneos               ║");
             System.out.println("║ 📊 Estado: Esperando conexiones de clientes...       ║");
             System.out.println("╚═══════════════════════════════════════════════════════╝");
 
-            System.out.println("\n🔗 Conexión cliente (misma red):");
-            System.out.println("   java -cp shared/target/classes;client/target/classes co.edu.uptc.client.ClientMain " + host + " " + port);
-            System.out.println("   (o usar script run-client-lan.bat)\n");
+            System.out.println("\n🔗 Conexión cliente:");
+            System.out.println("   java -cp shared/target/classes;client/target/classes co.edu.uptc.client.ClientMain "
+                    + host + " " + REGISTRY_PORT);
+            System.out.println("   (Nota: Asegúrate de abrir puertos " + REGISTRY_PORT + " y " + SERVICE_PORT
+                    + " en Azure/Firewall)\n");
 
             System.out.println("⚠️  Para detener el servidor presiona Ctrl+C");
 
@@ -77,10 +78,10 @@ public class ServerMain {
                 LOGGER.info("Servidor RMI detenido correctamente");
             }));
 
-            LOGGER.info("Servidor RMI iniciado correctamente en puerto " + port + " host " + host);
+            LOGGER.info("Servidor RMI iniciado correctamente en host " + host);
 
             Thread.currentThread().join();
-            
+
         } catch (Exception e) {
             System.err.println("❌ Error crítico iniciando servidor RMI: " + e.getMessage());
             LOGGER.severe("Error crítico en el servidor: " + e.getMessage());
@@ -94,12 +95,14 @@ public class ServerMain {
             Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
             while (nets.hasMoreElements()) {
                 NetworkInterface ni = nets.nextElement();
-                if (!ni.isUp() || ni.isLoopback() || ni.isVirtual()) continue;
+                if (!ni.isUp() || ni.isLoopback() || ni.isVirtual())
+                    continue;
                 Enumeration<InetAddress> addrs = ni.getInetAddresses();
                 while (addrs.hasMoreElements()) {
                     InetAddress a = addrs.nextElement();
                     String ip = a.getHostAddress();
-                    if (ip.contains(":")) continue; // skip IPv6
+                    if (ip.contains(":"))
+                        continue; // skip IPv6
                     if (ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.")) {
                         return ip;
                     }
