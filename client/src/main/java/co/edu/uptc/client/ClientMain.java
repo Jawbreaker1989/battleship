@@ -41,10 +41,21 @@ public class ClientMain {
         
         SwingUtilities.invokeLater(() -> {
             try {
-                // Configurar timeouts RMI (NO fijar hostname en el cliente para permitir callbacks correctos)
+                // Configurar timeouts RMI
                 System.setProperty("sun.rmi.transport.tcp.responseTimeout", "10000");
                 System.setProperty("sun.rmi.transport.tcp.readTimeout", "10000");
-                // IMPORTANTE: No usar java.rmi.server.hostname aquí; dejar que RMI anuncie la IP real del cliente
+                
+                // IMPORTANTE: Solo configurar java.rmi.server.hostname si es conexión remota (no localhost)
+                // Esto permite que el servidor sepa cómo conectar de vuelta al cliente para callbacks
+                if (!host.equals("localhost") && !host.equals("127.0.0.1")) {
+                    try {
+                        String localIp = java.net.InetAddress.getLocalHost().getHostAddress();
+                        System.setProperty("java.rmi.server.hostname", localIp);
+                        LOGGER.info("Configurado hostname RMI del cliente para callbacks remoto: " + localIp);
+                    } catch (Exception e) {
+                        LOGGER.warning("No se pudo detectar IP local, usando configuración por defecto: " + e.getMessage());
+                    }
+                }
                 
                 // Buscar registro RMI con reintentos
                 Registry registry = connectWithRetry(host, port, 5);
