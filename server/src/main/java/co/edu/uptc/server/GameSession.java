@@ -1,0 +1,294 @@
+package co.edu.uptc.server;
+
+import co.edu.uptc.shared.model.*;
+import java.rmi.RemoteException;
+import java.util.logging.Logger;
+
+/**
+ * Sesión simple de juego entre 2 jugadores
+ * Coordina la partida distribuida con lógica extendida (ready y primer turno)
+ */
+public class GameSession {
+    private static final Logger LOGGER = Logger.getLogger(GameSession.class.getName());
+
+    private final String sessionId;
+    private Player player1;
+    private Player player2;
+    private String currentTurn; // ID del jugador actual
+    private GameStatus.GamePhase phase;
+    private String firstReadyPlayerId; // Quién presionó listo primero
+
+    public GameSession(String sessionId) {
+        this.sessionId = sessionId;
+        this.phase = GameStatus.GamePhase.WAITING;
+        this.firstReadyPlayerId = null;
+    }
+
+    // Añade un jugador a la sesión
+    public synchronized boolean addPlayer(Player player) {
+        if (player1 == null) {
+            player1 = player;
+            notifyPlayer(player, "Esperando segundo jugador...");
+            return true;
+        } else if (player2 == null) {
+            player2 = player;
+            phase = GameStatus.GamePhase.PLACING_SHIPS;
+            notifyPlayer(player1, "Jugador 2 conectado: " + player2.getName());
+            notifyPlayer(player2, "Conectado contra: " + player1.getName());
+            notifyBothPlayers("¡Coloquen sus barcos!");
+            return true;
+        }
+        return false; // Sesión llena
+    }
+
+    // Coloca un barco para un jugador con validación de tamaño disponible
+    public synchronized boolean placeShip(String playerId, Position start, Position end) {
+        Player player = getPlayer(playerId);
+        if (player == null || phase != GameStatus.GamePhase.PLACING_SHIPS) {
+            return false;
+        }
+        try {
+            int size;
+            if (start.getX() == end.getX()) {
+                size = Math.abs(start.getY() - end.getY()) + 1;
+            } else if (start.getY() == end.getY()) {
+                size = Math.abs(start.getX() - end.getX()) + 1;
+            } else {
+                notifyPlayer(player, "El barco debe ser horizontal o vertical");
+                return false;
+            }
+            if (!player.hasShipAvailable(size)) {
+                notifyPlayer(player, "No tienes barco de tamaño " + size + " disponible. Restantes: " + player.getRemainingShips());
+                return false;
+            }
+            player.consumeShip(size);
+            boolean placed = player.getBoard().placeShip(start, end);
+            if (!placed) {
+                player.returnShip(size);
+                notifyPlayer(player, "Posición inválida o superposición");
+                return false;
+            }
+            notifyPlayer(player, "Barco de tamaño " + size + " colocado. Restantes: " + player.getRemainingShips());
+            return true;
+        } catch (Exception e) {
+            LOGGER.warning("Error colocando barco: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // Marca jugador como listo; inicia juego si ambos listos
+    public synchronized boolean markPlayerReady(String playerId) {
+        Player p = getPlayer(playerId);
+        if (p == null || phase != GameStatus.GamePhase.PLACING_SHIPS) return false;
+        if (!p.allShipsPlaced()) {
+            notifyPlayer(p, "Aún no has colocado todos tus barcos");
+            return false;
+        }
+        p.setReady(true);
+        if (firstReadyPlayerId == null) firstReadyPlayerId = playerId;
+        notifyPlayer(p, "Marcado como listo. Esperando oponente...");
+        if (bothPlayersReady()) startGame();
+        return true;
+    }
+
+    // Realiza un ataque
+    public synchronized Board.AttackResult attack(String playerId, Position target) {
+        if (phase != GameStatus.GamePhase.PLAYING || !playerId.equals(currentTurn)) {
+            return null; // No es tu turno
+        }
+        Player attacker = getPlayer(playerId);
+        Player defender = getOpponent(playerId);
+        if (attacker == null || defender == null) {
+            return null;
+        }
+        
+        // Usar método extendido para obtener información del barco hundido
+        Board.ExtendedAttackResult extendedResult = defender.getBoard().receiveAttackExtended(target);
+        Board.AttackResult result = extendedResult.getResult();
+        
+        // Trackear estadísticas del atacante
+        attacker.recordShotMade(result != Board.AttackResult.ALREADY_ATTACKED);
+        
+        // Si se hundió un barco, trackear estadísticas
+        if ((result == Board.AttackResult.SUNK || result == Board.AttackResult.SUNK_AND_GAME_OVER) 
+                && extendedResult.getSunkShip() != null) {
+            attacker.recordShipDestroyed(extendedResult.getSunkShip().getSize());
+        }
+        
+        // Notificaciones textuales básicas
+        notifyPlayer(attacker, "Atacaste " + target + ": " + result.getDescription());
+        notifyPlayer(defender, attacker.getName() + " atacó " + target + ": " + result.getDescription());
+        // Callback estructurado para pintar en clientes
+        sendAttackStructured(attacker, defender, target, result);
+        
+        if (result == Board.AttackResult.SUNK_AND_GAME_OVER) {
+            phase = GameStatus.GamePhase.FINISHED;
+            // Finalizar estadísticas para ambos jugadores
+            attacker.endGame(true);  // ganador
+            defender.endGame(false); // perdedor
+            
+            // Notificar fin del juego a ambos jugadores con callback
+            notifyGameEnded(attacker.getName());
+            notifyBothPlayers("¡" + attacker.getName() + " GANA!");
+            return result;
+        }
+        // Reglas clásicas: Sólo cambia turno con MISS.
+        if (result == Board.AttackResult.MISS) {
+            switchTurn();
+        }
+        return result;
+    }
+
+    // Obtiene el estado del juego para un jugador
+    public GameStatus getGameStatus(String playerId) {
+        Player requestingPlayer = getPlayer(playerId);
+        int playersConnected = (player1 != null ? 1 : 0) + (player2 != null ? 1 : 0);
+        switch (phase) {
+            case WAITING:
+                return GameStatus.waiting(playersConnected);
+            case PLACING_SHIPS:
+                return GameStatus.placingShips(playersConnected);
+            case PLAYING:
+                Player current = getPlayer(currentTurn);
+                String currentName = current != null ? current.getName() : "";
+                boolean isMyTurn = requestingPlayer != null && currentTurn.equals(requestingPlayer.getId());
+                return GameStatus.playing(currentName, isMyTurn);
+            case FINISHED:
+                String winner = "Juego terminado"; // Mensaje genérico (ya se notificó)
+                return GameStatus.finished(winner);
+            default:
+                return GameStatus.waiting(playersConnected);
+        }
+    }
+
+    private Player getPlayer(String playerId) {
+        if (player1 != null && player1.getId().equals(playerId)) return player1;
+        if (player2 != null && player2.getId().equals(playerId)) return player2;
+        return null;
+    }
+
+    private Player getOpponent(String playerId) {
+        if (player1 != null && player1.getId().equals(playerId)) return player2;
+        if (player2 != null && player2.getId().equals(playerId)) return player1;
+        return null;
+    }
+
+    private void startGame() {
+        phase = GameStatus.GamePhase.PLAYING;
+        if (firstReadyPlayerId != null) {
+            currentTurn = firstReadyPlayerId;
+        } else {
+            currentTurn = player1 != null ? player1.getId() : (player2 != null ? player2.getId() : null);
+        }
+        Player starter = getPlayer(currentTurn);
+        notifyBothPlayers("¡Juego iniciado! " + (starter != null ? starter.getName() : "?") + " ataca primero.");
+    }
+
+    private void switchTurn() {
+        currentTurn = currentTurn.equals(player1.getId()) ? player2.getId() : player1.getId();
+        Player current = getPlayer(currentTurn);
+        notifyBothPlayers("Turno de: " + current.getName());
+    }
+
+    private void sendAttackStructured(Player attacker, Player defender, Position pos, Board.AttackResult result) {
+        try {
+            // Para el atacante: yourBoard=false (marcar en tablero enemigo)
+            attacker.getCallback().onAttackEvent(attacker.getName(), pos.getX(), pos.getY(), result.name(), false);
+        } catch (Exception e) {
+            LOGGER.warning("No se pudo enviar callback ataque a atacante: " + e.getMessage());
+        }
+        try {
+            // Para el defensor: yourBoard=true (marcar en su propio tablero)
+            defender.getCallback().onAttackEvent(attacker.getName(), pos.getX(), pos.getY(), result.name(), true);
+        } catch (Exception e) {
+            LOGGER.warning("No se pudo enviar callback ataque a defensor: " + e.getMessage());
+        }
+    }
+
+    private boolean bothPlayersReady() {
+        return player1 != null && player2 != null && player1.isReady() && player2.isReady();
+    }
+
+    private void notifyPlayer(Player player, String message) {
+        try {
+            player.getCallback().onGameEvent(message);
+        } catch (RemoteException e) {
+            LOGGER.warning("Error notificando a " + player.getName() + ": " + e.getMessage());
+        }
+    }
+
+    private void notifyBothPlayers(String message) {
+        if (player1 != null) notifyPlayer(player1, message);
+        if (player2 != null) notifyPlayer(player2, message);
+    }
+    
+    /**
+     * Notifica el fin del juego a ambos jugadores usando el callback onGameEnded
+     */
+    private void notifyGameEnded(String winnerName) {
+        try {
+            if (player1 != null && player1.getCallback() != null) {
+                player1.getCallback().onGameEnded(winnerName);
+            }
+            if (player2 != null && player2.getCallback() != null) {
+                player2.getCallback().onGameEnded(winnerName);
+            }
+            LOGGER.info("Notificación de fin de juego enviada. Ganador: " + winnerName);
+        } catch (RemoteException e) {
+            LOGGER.warning("Error notificando fin de juego: " + e.getMessage());
+        }
+    }
+
+    // Getters simples
+    public String getSessionId() { return sessionId; }
+    public boolean isFull() { return player1 != null && player2 != null; }
+    public boolean isEmpty() { return player1 == null && player2 == null; }
+    
+    /**
+     * Obtiene el ID del oponente de un jugador dado
+     */
+    public String getOpponentId(String playerId) {
+        if (player1 != null && player1.getId().equals(playerId)) {
+            return player2 != null ? player2.getId() : null;
+        } else if (player2 != null && player2.getId().equals(playerId)) {
+            return player1 != null ? player1.getId() : null;
+        }
+        return null;
+    }
+    
+    /**
+     * Obtiene las estadísticas del oponente de un jugador dado
+     */
+    public GameStats getOpponentStats(String playerId) {
+        Player opponent = getOpponent(playerId);
+        return opponent != null ? opponent.getCurrentGameStats() : null;
+    }
+    
+    /**
+     * Resetea la sesión para una nueva partida manteniendo los jugadores
+     */
+    public synchronized void resetForNewGame() {
+        LOGGER.info("Reseteando sesión " + sessionId + " para nueva partida");
+        
+        // Resetear completamente el estado de la sesión
+        this.phase = GameStatus.GamePhase.PLACING_SHIPS;
+        this.currentTurn = null;
+        this.firstReadyPlayerId = null;
+        
+        // Verificar que ambos jugadores existen antes del reset
+        if (player1 != null && player2 != null) {
+            // Resetear jugadores (se hace desde GameServiceImpl ahora)
+            
+            // Notificar el inicio de nueva partida
+            try {
+                notifyPlayer(player1, "¡Nueva partida iniciada! Coloca tus barcos.");
+                notifyPlayer(player2, "¡Nueva partida iniciada! Coloca tus barcos.");
+                LOGGER.info("Notificaciones enviadas para nueva partida en sesión " + sessionId);
+            } catch (Exception e) {
+                LOGGER.warning("Error enviando notificaciones de nueva partida: " + e.getMessage());
+            }
+        }
+        
+        LOGGER.info("Sesión " + sessionId + " completamente reseteada para nueva partida");
+    }
+}

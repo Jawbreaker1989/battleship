@@ -1,0 +1,46 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+.flattened-pom.xml
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+
+# Archivos compilados
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+
+# Logs
+*.log
+logs/
+
+# Sistema
+.DS_Store
+Thumbs.db
+.env
+
+# Compilación
+build/
+dist/
+bin/
+
+# Temporales
+*.tmp
+*.swp
+*.swo
+*~
