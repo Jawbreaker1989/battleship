@@ -32,6 +32,7 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
     private GameSession currentSession;
     private final AtomicInteger playerCounter;
     private final ScheduledExecutorService heartbeatExecutor;
+    private final java.util.concurrent.ExecutorService callbackExecutor;
     
     public GameServiceImpl() throws RemoteException {
         super();
@@ -41,6 +42,7 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
         this.pendingNewGameRequests = new ConcurrentHashMap<>();
         this.playerCounter = new AtomicInteger(1);
         this.heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
+        this.callbackExecutor = Executors.newFixedThreadPool(4);
         
         // Iniciar monitoreo de conexiones
         startConnectionMonitoring();
@@ -67,12 +69,17 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
             playerToSession.put(playerId, session);
             LOGGER.info("Jugador " + playerName + " (" + playerId + ") conectado al sistema distribuido");
             
-            // Notificar al jugador sobre el estado actual
-            try {
-                callback.onGameEvent("Conectado al servidor. Esperando oponente...");
-            } catch (RemoteException e) {
-                LOGGER.warning("Error notificando conexión a " + playerId + ": " + e.getMessage());
-            }
+            // Notificar al jugador sobre el estado actual (asincrónico para evitar bloqueos con callbacks fallidos)
+            new Thread(() -> {
+                try {
+                    Thread.sleep(500); // Dar tiempo para que el cliente esté listo
+                    callback.onGameEvent("Conectado al servidor. Esperando oponente...");
+                } catch (RemoteException e) {
+                    LOGGER.warning("Error notificando conexión a " + playerId + " (RemoteException - posiblemente firewall): " + e.getMessage());
+                } catch (Exception e) {
+                    LOGGER.warning("Error notificando conexión a " + playerId + ": " + e.getMessage());
+                }
+            }, "callback-notifier-" + playerId).start();
             
             // Retornar en formato esperado por el cliente
             return "SUCCESS:" + playerId + ":" + session.getSessionId();
@@ -202,10 +209,12 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
             players.values().forEach(p -> {
                 long idle = currentTime - p.getLastActivity();
                 if (idle > SOFT_TIMEOUT_MS) {
-                    // Notificar solo una vez cada ciclo largo
-                    try {
-                        p.getCallback().onGameEvent("Conexión lenta detectada para " + p.getName() + " (reintentando)...");
-                    } catch (Exception ignored) {}
+                    // Notificar solo una vez cada ciclo largo (asincrónico)
+                    callbackExecutor.execute(() -> {
+                        try {
+                            p.getCallback().onGameEvent("Conexión lenta detectada para " + p.getName() + " (reintentando)...");
+                        } catch (Exception ignored) {}
+                    });
                 }
             });
 
@@ -314,7 +323,17 @@ public class GameServiceImpl extends UnicastRemoteObject implements GameService 
                     player.getCallback().onGameEnded(opponent.getName());
                     opponent.getCallback().onGameEnded(opponent.getName());
                 } catch (RemoteException e) {
-                    LOGGER.warning("Error notificando rendición: " + e.getMessage());
+                    LOGGER.warning("Error notificando rendición (intentando async): " + e.getMessage());
+                    // Reintento asincrónico
+                    callbackExecutor.execute(() -> {
+                        try {
+                            Thread.sleep(1000);
+                            player.getCallback().onGameEvent("Te has rendido. Has perdido la partida.");
+                            opponent.getCallback().onGameEvent("¡Victoria! Tu oponente se ha rendido.");
+                            player.getCallback().onGameEnded(opponent.getName());
+                            opponent.getCallback().onGameEnded(opponent.getName());
+                        } catch (Exception ignored) {}
+                    });
                 }
                 
                 LOGGER.info("Partida terminada por rendición: " + player.getName() + " se rindió, ganó " + opponent.getName());
