@@ -1,6 +1,7 @@
 @echo off
 REM Script para iniciar servidor Battleship en Azure
 REM Uso: start-server.bat
+REM Requiere: sshpass instalado
 
 setlocal enabledelayedexpansion
 
@@ -15,6 +16,16 @@ set AZURE_USER=azureuser
 set AZURE_PASS=200710526074Acdc
 set LOCAL_JAR=server\target\battleship-server-jar-with-dependencies.jar
 set REMOTE_JAR=/home/azureuser/battleship-server.jar
+
+REM Verificar si sshpass está disponible
+where sshpass >nul 2>&1
+if errorlevel 1 (
+    echo ⚠️  AVISO: sshpass no está instalado
+    echo Instala Git Bash: https://git-scm.com/download/win
+    echo.
+    pause
+    exit /b 1
+)
 
 REM Verificar si JAR existe localmente
 if not exist "%LOCAL_JAR%" (
@@ -37,7 +48,7 @@ echo     Desde: %LOCAL_JAR%
 echo     Hacia:  %AZURE_USER%@%AZURE_HOST%:%REMOTE_JAR%
 echo.
 
-scp -o ConnectTimeout=10 "%LOCAL_JAR%" "%AZURE_USER%@%AZURE_HOST%:%REMOTE_JAR%"
+sshpass -p "%AZURE_PASS%" scp -o ConnectTimeout=10 -o StrictHostKeyChecking=no "%LOCAL_JAR%" "%AZURE_USER%@%AZURE_HOST%:%REMOTE_JAR%"
 
 if errorlevel 1 (
     echo ❌ Error en transferencia SCP
@@ -50,20 +61,20 @@ echo ✓ Transferencia exitosa
 echo.
 
 echo [3] Deteniendo servidor anterior (si existe)...
-ssh "%AZURE_USER%@%AZURE_HOST%" "pkill -9 -f battleship-server 2>/dev/null; sleep 1"
+sshpass -p "%AZURE_PASS%" ssh -o StrictHostKeyChecking=no "%AZURE_USER%@%AZURE_HOST%" "pkill -9 -f battleship-server 2>/dev/null; sleep 1"
 
 echo ✓ Limpio
 echo.
 
 echo [4] Iniciando servidor en Azure...
-ssh "%AZURE_USER%@%AZURE_HOST%" "cd /home/%AZURE_USER% && nohup java -jar battleship-server.jar > server.log 2>&1 &"
+sshpass -p "%AZURE_PASS%" ssh -o StrictHostKeyChecking=no "%AZURE_USER%@%AZURE_HOST%" "cd /home/%AZURE_USER% && nohup java -jar battleship-server.jar > server.log 2>&1 &"
 
 timeout /t 3 /nobreak
 
 echo.
 
 echo [5] Verificando que servidor está corriendo...
-ssh "%AZURE_USER%@%AZURE_HOST%" "pgrep -f battleship-server"
+sshpass -p "%AZURE_PASS%" ssh -o StrictHostKeyChecking=no "%AZURE_USER%@%AZURE_HOST%" "pgrep -f battleship-server"
 
 if errorlevel 1 (
     echo ❌ Servidor no se inició correctamente

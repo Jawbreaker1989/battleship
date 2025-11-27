@@ -1,6 +1,7 @@
 @echo off
 REM Script para verificar estado del servidor Battleship en Azure
 REM Uso: check-server-status.bat
+REM Requiere: sshpass instalado
 
 setlocal enabledelayedexpansion
 
@@ -12,15 +13,27 @@ echo.
 
 set AZURE_HOST=68.211.112.149
 set AZURE_USER=azureuser
+set AZURE_PASS=200710526074Acdc
 set AZURE_PORT=8080
 
 echo Conectando a Azure VM...
 echo IP: %AZURE_HOST%
 echo.
 
+REM Verificar si sshpass está disponible
+where sshpass >nul 2>&1
+if errorlevel 1 (
+    echo ⚠️  AVISO: sshpass no está instalado
+    echo Intenta instalar Git Bash que incluye sshpass
+    echo https://git-scm.com/download/win
+    echo.
+    pause
+    exit /b 1
+)
+
 REM Intentar conexión SSH
 echo [1] Verificando conexión SSH...
-ssh -o ConnectTimeout=5 %AZURE_USER%@%AZURE_HOST% "echo SSH OK" >nul 2>&1
+sshpass -p "%AZURE_PASS%" ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no %AZURE_USER%@%AZURE_HOST% "echo SSH_OK" >nul 2>&1
 
 if errorlevel 1 (
     echo ❌ No hay conexión SSH
@@ -37,7 +50,7 @@ echo.
 
 REM Verificar proceso Java
 echo [2] Verificando si servidor Java está corriendo...
-ssh %AZURE_USER%@%AZURE_HOST% "pgrep -f battleship-server" >nul 2>&1
+sshpass -p "%AZURE_PASS%" ssh -o StrictHostKeyChecking=no %AZURE_USER%@%AZURE_HOST% "pgrep -f battleship-server" >nul 2>&1
 
 if errorlevel 1 (
     echo ❌ Servidor NO está ejecutándose
@@ -52,7 +65,7 @@ if errorlevel 1 (
 
 echo.
 echo [3] Verificando puerto %AZURE_PORT%...
-ssh %AZURE_USER%@%AZURE_HOST% "ss -tlnp 2>/dev/null | grep :%AZURE_PORT%" >nul 2>&1
+sshpass -p "%AZURE_PASS%" ssh -o StrictHostKeyChecking=no %AZURE_USER%@%AZURE_HOST% "ss -tlnp 2>/dev/null | grep :%AZURE_PORT%" >nul 2>&1
 
 if errorlevel 1 (
     echo ⚠️  Puerto %AZURE_PORT% no está escuchando (puede estar iniciando)
@@ -62,7 +75,7 @@ if errorlevel 1 (
 
 echo.
 echo [4] Últimas líneas del log...
-ssh %AZURE_USER%@%AZURE_HOST% "tail -5 /home/azureuser/server.log"
+sshpass -p "%AZURE_PASS%" ssh -o StrictHostKeyChecking=no %AZURE_USER%@%AZURE_HOST% "tail -5 /home/azureuser/server.log"
 
 echo.
 echo ========================================
