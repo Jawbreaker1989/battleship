@@ -62,15 +62,35 @@ public class GameController {
     }
 
     public void handleGameEvent(String message) {
-        SwingUtilities.invokeLater(() -> gameWindow.showMessage(message));
+        SwingUtilities.invokeLater(() -> {
+            gameWindow.showMessage(message);
 
-        if (message.contains("¡Juego iniciado!") || message.contains("¡Batalla iniciada!")) {
-            // El juego ha comenzado
-        }
+            // Detectar eventos importantes
+            if (message.contains("¡Juego iniciado!") || message.contains("¡JUEGO INICIADO!") || message.contains("¡Batalla iniciada!")) {
+                gameWindow.updateStatus("Juego en progreso");
+            } else if (message.contains("Cambio de turno") || message.contains("🔄")) {
+                // El cambio de turno se manejará vía statusUpdate
+                gameWindow.updateStatus("Cambio de turno en progreso...");
+            }
+        });
     }
 
     public void handleStatusUpdate(String status) {
-        SwingUtilities.invokeLater(() -> gameWindow.updateStatus(status));
+        SwingUtilities.invokeLater(() -> {
+            gameWindow.updateStatus(status);
+            gameWindow.showMessage(status);
+            
+            // Detectar cambio de turno automáticamente desde el status
+            if (status.contains("¡ES TU TURNO!")) {
+                isMyTurn = true;
+                gameWindow.setTurnIndicator(true);
+                gameWindow.updateGameControls(true, false, true);
+            } else if (status.contains("Turno del oponente") || status.contains("⏳")) {
+                isMyTurn = false;
+                gameWindow.setTurnIndicator(false);
+                gameWindow.updateGameControls(true, false, false);
+            }
+        });
     }
 
     public void handleTurnChange(boolean isMyTurn, String currentPlayerName) {

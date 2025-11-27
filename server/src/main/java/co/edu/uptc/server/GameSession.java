@@ -117,6 +117,12 @@ public class GameSession {
         Board.ExtendedAttackResult extendedResult = defender.getBoard().receiveAttackExtended(target);
         Board.AttackResult result = extendedResult.getResult();
 
+        // Si ya fue atacada, rechazar el intento
+        if (result == Board.AttackResult.ALREADY_ATTACKED) {
+            notifyPlayer(attacker, "⚠️ Ya atacaste esa posición (" + target + ")");
+            return result;
+        }
+
         // Trackear estadísticas del atacante
         attacker.recordShotMade(result != Board.AttackResult.ALREADY_ATTACKED);
 
@@ -127,8 +133,8 @@ public class GameSession {
         }
 
         // Notificaciones textuales básicas
-        notifyPlayer(attacker, "Atacaste " + target + ": " + result.getDescription());
-        notifyPlayer(defender, attacker.getName() + " atacó " + target + ": " + result.getDescription());
+        notifyPlayer(attacker, "💥 Atacaste " + target + ": " + result.getDescription());
+        notifyPlayer(defender, "🎯 " + attacker.getName() + " atacó " + target + ": " + result.getDescription());
         // Callback estructurado para pintar en clientes
         sendAttackStructured(attacker, defender, target, result);
 
@@ -143,10 +149,15 @@ public class GameSession {
             notifyBothPlayers("¡" + attacker.getName() + " GANA!");
             return result;
         }
+        
         // Reglas clásicas: Sólo cambia turno con MISS.
         if (result == Board.AttackResult.MISS) {
             switchTurn();
+        } else {
+            // Si fue HIT o SUNK pero el juego no terminó, el atacante continúa
+            notifyPlayer(attacker, "✓ ¡Golpe acertado! Tu turno continúa...");
         }
+        
         return result;
     }
 
@@ -214,9 +225,24 @@ public class GameSession {
     }
 
     private void switchTurn() {
+        String previousTurn = currentTurn;
         currentTurn = currentTurn.equals(player1.getId()) ? player2.getId() : player1.getId();
+        
         Player current = getPlayer(currentTurn);
-        notifyBothPlayers("Turno de: " + current.getName());
+        Player previous = getPlayer(previousTurn);
+        
+        // Notificación de cambio de turno
+        notifyBothPlayers("🔄 Cambio de turno: " + current.getName() + " ahora ataca");
+        
+        // Enviar statusUpdate personalizado a cada jugador
+        if (current != null) {
+            sendStatusUpdate(current, "¡ES TU TURNO! Ataca al enemigo");
+        }
+        if (previous != null) {
+            sendStatusUpdate(previous, "⏳ Turno del oponente (" + current.getName() + ")");
+        }
+        
+        LOGGER.info("Turn switched from " + previous.getName() + " to " + current.getName());
     }
 
     private void sendAttackStructured(Player attacker, Player defender, Position pos, Board.AttackResult result) {
