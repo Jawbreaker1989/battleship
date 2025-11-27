@@ -7,11 +7,19 @@
 
     <parent>
         <groupId>co.edu.uptc</groupId>
-        <artifactId>battleship-rmi</artifactId>
+        <artifactId>battleship-websocket</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>shared</artifactId>
     <packaging>jar</packaging>
+
+    <dependencies>
+        <!-- Gson for JSON serialization -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+        </dependency>
+    </dependencies>
 
 </project>

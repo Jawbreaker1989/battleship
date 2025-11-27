@@ -7,7 +7,7 @@
 
     <parent>
         <groupId>co.edu.uptc</groupId>
-        <artifactId>battleship-rmi</artifactId>
+        <artifactId>battleship-websocket</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
@@ -20,6 +20,58 @@
             <artifactId>shared</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
+        
+        <!-- WebSocket API -->
+        <dependency>
+            <groupId>javax.websocket</groupId>
+            <artifactId>javax.websocket-api</artifactId>
+        </dependency>
+        
+        <!-- Tyrus WebSocket Server -->
+        <dependency>
+            <groupId>org.glassfish.tyrus</groupId>
+            <artifactId>tyrus-server</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.glassfish.tyrus</groupId>
+            <artifactId>tyrus-container-grizzly-server</artifactId>
+        </dependency>
+        
+        <!-- Gson for JSON -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+        </dependency>
     </dependencies>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.6.0</version>
+                <configuration>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                    <archive>
+                        <manifest>
+                            <mainClass>co.edu.uptc.server.ServerMainWebSocket</mainClass>
+                        </manifest>
+                    </archive>
+                    <finalName>battleship-server</finalName>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>make-assembly</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

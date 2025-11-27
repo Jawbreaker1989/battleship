@@ -7,15 +7,15 @@ import java.util.Objects;
 
 /**
  * Representa un barco en el juego distribuido
- * Serializable para transferencia entre cliente-servidor RMI
+ * Serializable para transferencia entre cliente-servidor
  */
 public class Ship implements Serializable {
     private static final long serialVersionUID = 1L;
-    
+
     private final List<Position> positions;
     private final List<Boolean> hits;
     private final int size;
-    
+
     public Ship(Position start, Position end) {
         this.positions = calculatePositions(start, end);
         this.size = positions.size();
@@ -24,10 +24,10 @@ public class Ship implements Serializable {
             hits.add(false);
         }
     }
-    
+
     private List<Position> calculatePositions(Position start, Position end) {
         List<Position> result = new ArrayList<>();
-        
+
         if (start.getX() == end.getX()) {
             // Vertical
             int minY = Math.min(start.getY(), end.getY());
@@ -45,14 +45,14 @@ public class Ship implements Serializable {
         } else {
             throw new IllegalArgumentException("El barco debe ser horizontal o vertical");
         }
-        
+
         return result;
     }
-    
+
     public boolean occupiesPosition(Position position) {
         return positions.contains(position);
     }
-    
+
     public boolean hit(Position position) {
         int index = positions.indexOf(position);
         if (index >= 0 && !hits.get(index)) {
@@ -61,27 +61,29 @@ public class Ship implements Serializable {
         }
         return false;
     }
-    
+
     public boolean isSunk() {
         return hits.stream().allMatch(hit -> hit);
     }
-    
+
     public List<Position> getPositions() {
         return new ArrayList<>(positions);
     }
-    
+
     public int getSize() {
         return size;
     }
-    
+
     @Override
     public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
+        if (this == obj)
+            return true;
+        if (obj == null || getClass() != obj.getClass())
+            return false;
         Ship ship = (Ship) obj;
         return Objects.equals(positions, ship.positions);
     }
-    
+
     @Override
     public int hashCode() {
         return Objects.hash(positions);

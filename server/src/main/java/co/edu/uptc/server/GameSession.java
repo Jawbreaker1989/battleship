@@ -1,7 +1,7 @@
 package co.edu.uptc.server;
 
 import co.edu.uptc.shared.model.*;
-import java.rmi.RemoteException;
+import co.edu.uptc.shared.messages.ServerMessage;
 import java.util.logging.Logger;
 
 /**
@@ -29,6 +29,7 @@ public class GameSession {
         if (player1 == null) {
             player1 = player;
             notifyPlayer(player, "Esperando segundo jugador...");
+            sendStatusUpdate(player, "Esperando oponente...");
             return true;
         } else if (player2 == null) {
             player2 = player;
@@ -36,6 +37,10 @@ public class GameSession {
             notifyPlayer(player1, "Jugador 2 conectado: " + player2.getName());
             notifyPlayer(player2, "Conectado contra: " + player1.getName());
             notifyBothPlayers("¡Coloquen sus barcos!");
+
+            // Send status update to both players
+            sendStatusUpdate(player1, "¡Prepárense para batalla! Coloca tus barcos");
+            sendStatusUpdate(player2, "¡Prepárense para batalla! Coloca tus barcos");
             return true;
         }
         return false; // Sesión llena
@@ -58,7 +63,8 @@ public class GameSession {
                 return false;
             }
             if (!player.hasShipAvailable(size)) {
-                notifyPlayer(player, "No tienes barco de tamaño " + size + " disponible. Restantes: " + player.getRemainingShips());
+                notifyPlayer(player,
+                        "No tienes barco de tamaño " + size + " disponible. Restantes: " + player.getRemainingShips());
                 return false;
             }
             player.consumeShip(size);
@@ -79,15 +85,18 @@ public class GameSession {
     // Marca jugador como listo; inicia juego si ambos listos
     public synchronized boolean markPlayerReady(String playerId) {
         Player p = getPlayer(playerId);
-        if (p == null || phase != GameStatus.GamePhase.PLACING_SHIPS) return false;
+        if (p == null || phase != GameStatus.GamePhase.PLACING_SHIPS)
+            return false;
         if (!p.allShipsPlaced()) {
             notifyPlayer(p, "Aún no has colocado todos tus barcos");
             return false;
         }
         p.setReady(true);
-        if (firstReadyPlayerId == null) firstReadyPlayerId = playerId;
+        if (firstReadyPlayerId == null)
+            firstReadyPlayerId = playerId;
         notifyPlayer(p, "Marcado como listo. Esperando oponente...");
-        if (bothPlayersReady()) startGame();
+        if (bothPlayersReady())
+            startGame();
         return true;
     }
 
@@ -101,32 +110,32 @@ public class GameSession {
         if (attacker == null || defender == null) {
             return null;
         }
-        
+
         // Usar método extendido para obtener información del barco hundido
         Board.ExtendedAttackResult extendedResult = defender.getBoard().receiveAttackExtended(target);
         Board.AttackResult result = extendedResult.getResult();
-        
+
         // Trackear estadísticas del atacante
         attacker.recordShotMade(result != Board.AttackResult.ALREADY_ATTACKED);
-        
+
         // Si se hundió un barco, trackear estadísticas
-        if ((result == Board.AttackResult.SUNK || result == Board.AttackResult.SUNK_AND_GAME_OVER) 
+        if ((result == Board.AttackResult.SUNK || result == Board.AttackResult.SUNK_AND_GAME_OVER)
                 && extendedResult.getSunkShip() != null) {
             attacker.recordShipDestroyed(extendedResult.getSunkShip().getSize());
         }
-        
+
         // Notificaciones textuales básicas
         notifyPlayer(attacker, "Atacaste " + target + ": " + result.getDescription());
         notifyPlayer(defender, attacker.getName() + " atacó " + target + ": " + result.getDescription());
         // Callback estructurado para pintar en clientes
         sendAttackStructured(attacker, defender, target, result);
-        
+
         if (result == Board.AttackResult.SUNK_AND_GAME_OVER) {
             phase = GameStatus.GamePhase.FINISHED;
             // Finalizar estadísticas para ambos jugadores
-            attacker.endGame(true);  // ganador
+            attacker.endGame(true); // ganador
             defender.endGame(false); // perdedor
-            
+
             // Notificar fin del juego a ambos jugadores con callback
             notifyGameEnded(attacker.getName());
             notifyBothPlayers("¡" + attacker.getName() + " GANA!");
@@ -162,14 +171,18 @@ public class GameSession {
     }
 
     private Player getPlayer(String playerId) {
-        if (player1 != null && player1.getId().equals(playerId)) return player1;
-        if (player2 != null && player2.getId().equals(playerId)) return player2;
+        if (player1 != null && player1.getId().equals(playerId))
+            return player1;
+        if (player2 != null && player2.getId().equals(playerId))
+            return player2;
         return null;
     }
 
     private Player getOpponent(String playerId) {
-        if (player1 != null && player1.getId().equals(playerId)) return player2;
-        if (player2 != null && player2.getId().equals(playerId)) return player1;
+        if (player1 != null && player1.getId().equals(playerId))
+            return player2;
+        if (player2 != null && player2.getId().equals(playerId))
+            return player1;
         return null;
     }
 
@@ -181,7 +194,17 @@ public class GameSession {
             currentTurn = player1 != null ? player1.getId() : (player2 != null ? player2.getId() : null);
         }
         Player starter = getPlayer(currentTurn);
+        Player waiter = getOpponent(currentTurn);
+
         notifyBothPlayers("¡Juego iniciado! " + (starter != null ? starter.getName() : "?") + " ataca primero.");
+
+        // Send status updates to both players
+        if (starter != null) {
+            sendStatusUpdate(starter, "¡Tu turno! Ataca al enemigo");
+        }
+        if (waiter != null) {
+            sendStatusUpdate(waiter, "Turno de " + (starter != null ? starter.getName() : "oponente"));
+        }
     }
 
     private void switchTurn() {
@@ -193,15 +216,19 @@ public class GameSession {
     private void sendAttackStructured(Player attacker, Player defender, Position pos, Board.AttackResult result) {
         try {
             // Para el atacante: yourBoard=false (marcar en tablero enemigo)
-            attacker.getCallback().onAttackEvent(attacker.getName(), pos.getX(), pos.getY(), result.name(), false);
+            ServerMessage msg = ServerMessage.attackEvent(attacker.getName(), pos.getX(), pos.getY(), result.name(),
+                    false);
+            GameWebSocketServer.sendToPlayer(attacker.getId(), msg);
         } catch (Exception e) {
-            LOGGER.warning("No se pudo enviar callback ataque a atacante: " + e.getMessage());
+            LOGGER.warning("No se pudo enviar ataque a atacante: " + e.getMessage());
         }
         try {
             // Para el defensor: yourBoard=true (marcar en su propio tablero)
-            defender.getCallback().onAttackEvent(attacker.getName(), pos.getX(), pos.getY(), result.name(), true);
+            ServerMessage msg = ServerMessage.attackEvent(attacker.getName(), pos.getX(), pos.getY(), result.name(),
+                    true);
+            GameWebSocketServer.sendToPlayer(defender.getId(), msg);
         } catch (Exception e) {
-            LOGGER.warning("No se pudo enviar callback ataque a defensor: " + e.getMessage());
+            LOGGER.warning("No se pudo enviar ataque a defensor: " + e.getMessage());
         }
     }
 
@@ -211,39 +238,60 @@ public class GameSession {
 
     private void notifyPlayer(Player player, String message) {
         try {
-            player.getCallback().onGameEvent(message);
-        } catch (RemoteException e) {
+            ServerMessage msg = ServerMessage.gameEvent(message);
+            GameWebSocketServer.sendToPlayer(player.getId(), msg);
+        } catch (Exception e) {
             LOGGER.warning("Error notificando a " + player.getName() + ": " + e.getMessage());
         }
     }
 
     private void notifyBothPlayers(String message) {
-        if (player1 != null) notifyPlayer(player1, message);
-        if (player2 != null) notifyPlayer(player2, message);
+        if (player1 != null)
+            notifyPlayer(player1, message);
+        if (player2 != null)
+            notifyPlayer(player2, message);
     }
-    
+
+    private void sendStatusUpdate(Player player, String status) {
+        try {
+            ServerMessage msg = ServerMessage.statusUpdate(status);
+            GameWebSocketServer.sendToPlayer(player.getId(), msg);
+        } catch (Exception e) {
+            LOGGER.warning("Error sending status to " + player.getName() + ": " + e.getMessage());
+        }
+    }
+
     /**
-     * Notifica el fin del juego a ambos jugadores usando el callback onGameEnded
+     * Notifica el fin del juego a ambos jugadores
      */
     private void notifyGameEnded(String winnerName) {
         try {
-            if (player1 != null && player1.getCallback() != null) {
-                player1.getCallback().onGameEnded(winnerName);
+            ServerMessage msg = ServerMessage.gameEnded(winnerName);
+            if (player1 != null) {
+                GameWebSocketServer.sendToPlayer(player1.getId(), msg);
             }
-            if (player2 != null && player2.getCallback() != null) {
-                player2.getCallback().onGameEnded(winnerName);
+            if (player2 != null) {
+                GameWebSocketServer.sendToPlayer(player2.getId(), msg);
             }
             LOGGER.info("Notificación de fin de juego enviada. Ganador: " + winnerName);
-        } catch (RemoteException e) {
+        } catch (Exception e) {
             LOGGER.warning("Error notificando fin de juego: " + e.getMessage());
         }
     }
 
     // Getters simples
-    public String getSessionId() { return sessionId; }
-    public boolean isFull() { return player1 != null && player2 != null; }
-    public boolean isEmpty() { return player1 == null && player2 == null; }
-    
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public boolean isFull() {
+        return player1 != null && player2 != null;
+    }
+
+    public boolean isEmpty() {
+        return player1 == null && player2 == null;
+    }
+
     /**
      * Obtiene el ID del oponente de un jugador dado
      */
@@ -255,7 +303,7 @@ public class GameSession {
         }
         return null;
     }
-    
+
     /**
      * Obtiene las estadísticas del oponente de un jugador dado
      */
@@ -263,22 +311,22 @@ public class GameSession {
         Player opponent = getOpponent(playerId);
         return opponent != null ? opponent.getCurrentGameStats() : null;
     }
-    
+
     /**
      * Resetea la sesión para una nueva partida manteniendo los jugadores
      */
     public synchronized void resetForNewGame() {
         LOGGER.info("Reseteando sesión " + sessionId + " para nueva partida");
-        
+
         // Resetear completamente el estado de la sesión
         this.phase = GameStatus.GamePhase.PLACING_SHIPS;
         this.currentTurn = null;
         this.firstReadyPlayerId = null;
-        
+
         // Verificar que ambos jugadores existen antes del reset
         if (player1 != null && player2 != null) {
             // Resetear jugadores (se hace desde GameServiceImpl ahora)
-            
+
             // Notificar el inicio de nueva partida
             try {
                 notifyPlayer(player1, "¡Nueva partida iniciada! Coloca tus barcos.");
@@ -288,7 +336,7 @@ public class GameSession {
                 LOGGER.warning("Error enviando notificaciones de nueva partida: " + e.getMessage());
             }
         }
-        
+
         LOGGER.info("Sesión " + sessionId + " completamente reseteada para nueva partida");
     }
 }
