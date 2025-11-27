@@ -704,9 +704,23 @@ public class GameWindow extends JFrame {
      */
     public void updateGameControls(boolean gameInProgress, boolean gameFinished, boolean isMyTurn) {
         SwingUtilities.invokeLater(() -> {
-            // El botón rendirse solo se activa si el juego está en progreso Y es mi turno
-            surrenderButton.setEnabled(gameInProgress && isMyTurn);
+            // El botón rendirse solo se activa si el juego está en progreso
+            surrenderButton.setEnabled(gameInProgress);
             newGameButton.setEnabled(gameFinished);
+            
+            // Habilitar/deshabilitar modo de ataque en el tablero enemigo
+            if (enemyBoard != null) {
+                if (gameInProgress && isMyTurn) {
+                    // Es mi turno: permitir atacar el tablero enemigo
+                    enemyBoard.setAttackMode(true);
+                } else {
+                    // No es mi turno: deshabilitar ataques
+                    enemyBoard.setAttackMode(false);
+                }
+            }
+            
+            LOGGER.info("Game controls updated - gameInProgress: " + gameInProgress + 
+                       ", isMyTurn: " + isMyTurn + ", gameFinished: " + gameFinished);
         });
     }
 

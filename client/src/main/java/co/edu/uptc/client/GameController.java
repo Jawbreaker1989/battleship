@@ -77,14 +77,16 @@ public class GameController {
 
     public void handleStatusUpdate(String status) {
         SwingUtilities.invokeLater(() -> {
+            LOGGER.info("Status update recibido: " + status);
             gameWindow.updateStatus(status);
             gameWindow.showMessage(status);
             
             // Detectar cambios de fase desde el status
-            if (status.contains("Coloca tus barcos") || status.contains("colocación")) {
+            if (status.contains("Prepárense para la batalla") || status.contains("Coloca tus barcos")) {
                 // Fase de colocación de barcos
                 isMyTurn = false;
                 gameWindow.updateGameControls(true, false, false);
+                LOGGER.info("Fase de colocación detectada");
             } else if (status.contains("¡ES TU TURNO!")) {
                 // Es mi turno de atacar
                 isMyTurn = true;

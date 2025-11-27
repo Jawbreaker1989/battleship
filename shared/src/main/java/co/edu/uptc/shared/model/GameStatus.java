@@ -34,8 +34,10 @@ public final class GameStatus implements Serializable {
     }
 
     public static GameStatus placingShips(int playersConnected) {
+        String message = playersConnected == 2 ? "Prepárense para la batalla - Coloca tus barcos en el tablero"
+                : "Coloca tus barcos en el tablero";
         return new GameStatus(GamePhase.PLACING_SHIPS, null, false, playersConnected, null,
-                "Coloca tus barcos en el tablero");
+                message);
     }
 
     public static GameStatus playing(String currentPlayerName, boolean isMyTurn) {

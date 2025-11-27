@@ -37,30 +37,38 @@ public class GameSession {
         }
 
         // Si ahora está llena y antes no lo estaba, iniciar fase de colocación
+        // PERO NO notificar aquí - eso se hace desde el servicio
         if (isFull() && !wasFull) {
             phase = GameStatus.GamePhase.PLACING_SHIPS;
-
-            // Notificar a ambos jugadores
-            notifyPlayer(player1, "¡Jugador conectado! " + player2.getName() + " se ha unido. ¡Coloca tus barcos!");
-            notifyPlayer(player2, "¡Conectado contra: " + player1.getName() + "! ¡Coloca tus barcos!");
-            notifyBothPlayers("¡Fase de colocación de barcos iniciada!");
-
-            sendStatusUpdate(player1, "Oponente conectado: " + player2.getName() + ". Coloca tus barcos");
-            sendStatusUpdate(player2, "Jugando contra: " + player1.getName() + ". Coloca tus barcos");
-        } else if (player1 != null && player2 == null) {
-            // Solo hay un jugador (el primero)
-            notifyPlayer(player1, "Esperando segundo jugador...");
-            sendStatusUpdate(player1, "Esperando oponente...");
-        } else if (player1 == null && player2 != null) {
-            // Caso raro: player1 se fue, player2 quedó esperando
-            // El nuevo player entró como player1
-            // Invertimos roles para mantener lógica o simplemente iniciamos
-            // Al entrar en el primer if, player1 ya se asignó.
-            // Así que ahora isFull() es true.
-            // Este bloque else if no se alcanzará si isFull() es true.
         }
 
         return true;
+    }
+
+    // Comprueba si se acaba de completar la sesión (segundo jugador conectado)
+    public synchronized boolean justCompleted() {
+        return isFull() && phase == GameStatus.GamePhase.PLACING_SHIPS && 
+               player1 != null && player2 != null;
+    }
+
+    // Notifica cuando se completa la conexión de ambos jugadores
+    public synchronized void notifyBothJoined() {
+        if (!isFull()) return;
+        
+        // Notificar a ambos jugadores
+        notifyPlayer(player1, "¡Jugador conectado! " + player2.getName() + " se ha unido. ¡Prepárense para la batalla!");
+        notifyPlayer(player2, "¡Conectado contra: " + player1.getName() + "! ¡Prepárense para la batalla!");
+        notifyBothPlayers("¡PREPÁRENSE PARA LA BATALLA!");
+
+        // Sincronizar estado a ambos jugadores en un thread separado
+        new Thread(() -> {
+            try {
+                Thread.sleep(100); // Esperar a que los clientes procesen los mensajes anteriores
+                syncBothPlayersStatus();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }).start();
     }
 
     public synchronized void removePlayer(String playerId) {
@@ -282,17 +290,32 @@ public class GameSession {
         Player starter = getPlayer(currentTurn);
         Player waiter = getOpponent(currentTurn);
 
+        LOGGER.info("INICIANDO JUEGO en sesión " + sessionId);
+        LOGGER.info("Jugador que comienza: " + (starter != null ? starter.getName() : "?"));
+        LOGGER.info("Fase: PLAYING");
+
         // Mensajes claros de inicio del juego
         String startMessage = "¡JUEGO INICIADO! " + (starter != null ? starter.getName() : "?") + " ataca primero.";
         notifyBothPlayers(startMessage);
 
-        // Send personalized status updates to both players
-        if (starter != null) {
-            sendStatusUpdate(starter, "¡ES TU TURNO! Ataca al enemigo en su tablero");
-        }
-        if (waiter != null) {
-            sendStatusUpdate(waiter, "🛡️ Turno del oponente (" + (starter != null ? starter.getName() : "?") + ")");
-        }
+        // Sincronizar estado a ambos jugadores en un thread separado
+        new Thread(() -> {
+            try {
+                Thread.sleep(100);
+                
+                // Send personalized status updates to both players
+                if (starter != null) {
+                    sendGameStatusUpdate(starter);
+                    sendStatusUpdate(starter, "¡ES TU TURNO! Ataca al enemigo en su tablero");
+                }
+                if (waiter != null) {
+                    sendGameStatusUpdate(waiter);
+                    sendStatusUpdate(waiter, "🛡️ Turno del oponente (" + (starter != null ? starter.getName() : "?") + ")");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }).start();
 
         LOGGER.info("Game started in session " + sessionId + ". Current turn: " + currentTurn);
     }
@@ -381,6 +404,28 @@ public class GameSession {
             LOGGER.info("Notificación de fin de juego enviada. Ganador: " + winnerName);
         } catch (Exception e) {
             LOGGER.warning("Error notificando fin de juego: " + e.getMessage());
+        }
+    }
+
+    // Notifica el estado del juego a un jugador específico
+    private void sendGameStatusUpdate(Player player) {
+        try {
+            GameStatus status = getGameStatus(player.getId());
+            ServerMessage msg = ServerMessage.statusUpdate(status.getStatusMessage());
+            LOGGER.info("Enviando statusUpdate a " + player.getName() + ": " + status.getStatusMessage());
+            GameWebSocketServer.sendToPlayer(player.getId(), msg);
+        } catch (Exception e) {
+            LOGGER.warning("Error enviando status update a " + player.getName() + ": " + e.getMessage());
+        }
+    }
+
+    // Sincroniza el estado del juego a ambos jugadores
+    private void syncBothPlayersStatus() {
+        if (player1 != null) {
+            sendGameStatusUpdate(player1);
+        }
+        if (player2 != null) {
+            sendGameStatusUpdate(player2);
         }
     }
 

@@ -1,4 +1,4 @@
-# 🚢 Batalla Naval Online - Proyecto Educativo
+#  Batalla Naval Online - Proyecto Educativo
 
 **Versión:** 1.0-SNAPSHOT  
 **Rama:** socketweb  
@@ -7,7 +7,7 @@
 
 ---
 
-## 📋 Descripción del Proyecto
+##  Descripción del Proyecto
 
 **Batalla Naval Online** es una aplicación educativa de juego de estrategia que demuestra:
 
@@ -68,7 +68,7 @@ java -jar battleship-client-jar-with-dependencies.jar 68.211.112.149 8080
 
 ---
 
-## 📁 Estructura del Proyecto
+##  Estructura del Proyecto
 
 ```
 battleship-websocket/
@@ -158,7 +158,7 @@ Contiene:
 
 ---
 
-## 📊 Diagrama de Arquitectura
+##  Diagrama de Arquitectura
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -244,7 +244,7 @@ Contiene:
    └─ Servidor valida y confirma
 
 4. FASE: LISTO PARA JUGAR
-   ├─ Cliente hace clic en "✅ ¡LISTO!"
+   ├─ Cliente hace clic en "¡LISTO!"
    ├─ Servidor marca como ready
    ├─ Cuando ambos ready → Juego comienza
    └─ Se asigna jugador que comenzará
@@ -265,9 +265,9 @@ Contiene:
 
 ---
 
-## 🧪 Testing
+##  Testing
 
-### Prueba Local (Recomendado para desarrollo)
+### Prueba Local 
 
 ```powershell
 # Terminal 1: Servidor
@@ -324,7 +324,7 @@ shared/target/
 
 ---
 
-## 🌐 Deploy a Azure
+##  Deploy a Azure
 
 ### Paso 1: Preparar Azure VM
 
@@ -399,7 +399,7 @@ ss -tan | grep 8080
 
 ---
 
-## 📝 Reglas de Batalla Naval
+##  Reglas de Batalla Naval
 
 ### Preparación
 - 2 jugadores
@@ -413,51 +413,17 @@ ss -tan | grep 8080
 4. Cuando hundes todos los barcos (SUNK) → ¡Ganaste!
 
 ### Barra de Estado
-- 🟢 **AGUA** → No acertaste
-- 🔥 **IMPACTO** → Golpeaste un barco
-- 💀 **HUNDIDO** → Barco completamente destruido
-- 🏆 **GANADOR** → Hundiste todos los barcos
+- **AGUA** → No acertaste
+- **IMPACTO** → Golpeaste un barco
+- **HUNDIDO** → Barco completamente destruido
+- **GANADOR** → Hundiste todos los barcos
 
 ---
 
-## ❓ Preguntas Frecuentes
-
-**P: ¿Puedo jugar con alguien en otra red?**  
-R: Sí, si ambos se conectan al servidor en Azure (IP pública).
-
-**P: ¿Se guardán las partidas?**  
-R: No, el proyecto es educativo sin persistencia. Las sesiones son en memoria.
-
-**P: ¿Puedo jugar con más de 2 jugadores?**  
-R: El diseño es para 2. Para más, requiere cambios en la arquitectura.
-
-**P: ¿Por qué WebSocket y no HTTP?**  
-R: WebSocket permite comunicación **bidireccional en tiempo real**, esencial para videojuegos.
-
-**P: ¿Cómo modifico el servidor para cambiar puerto?**  
-R: En `ServerMainWebSocket.java`, línea: `private static final int WEBSOCKET_PORT = 8080;`
-
-**P: ¿Puedo usar esto en producción?**  
-R: No, es educativo. Para producción necesita: persistencia DB, autenticación, HTTPS, etc.
 
 ---
 
-## 🛠️ Troubleshooting Rápido
-
-| Problema | Solución |
-|----------|----------|
-| "Java no encontrado" | Instalar JDK 11, agregar a PATH |
-| "Maven no encontrado" | Instalar Maven, agregar a PATH |
-| "No se puede compilar" | `mvn clean install` en root |
-| "JAR no existe" | Verificar compilación: `mvn clean package` |
-| "Cliente no conecta" | Verificar servidor corre y puerto 8080 está abierto |
-| "Conexión rechazada" | NSG en Azure debe permitir puerto 8080 |
-
-**Para investigación más profunda:** Ver [`DIAGNOSTICO_Y_REQUERIMIENTOS.md`](DIAGNOSTICO_Y_REQUERIMIENTOS.md)
-
----
-
-## 📞 Información de Contacto
+##  Información de Contacto
 
 **Autor del Proyecto:** César Caro  
 **Estudiante ID:** 202221682  
@@ -469,46 +435,8 @@ R: No, es educativo. Para producción necesita: persistencia DB, autenticación,
 
 ---
 
-## 📄 Licencia
+## Licencia
 
 Este es un proyecto educativo. Úsalo libremente para aprender.
 
----
 
-## 🎓 Conceptos Aprendidos
-
-Este proyecto enseña:
-
-✅ **Comunicación en Tiempo Real**
-- WebSocket vs HTTP
-- Ventajas de bidireccional
-
-✅ **Arquitectura Distribuida**
-- Cliente-servidor
-- Separación de responsabilidades
-
-✅ **Serialización de Datos**
-- JSON con Gson
-- ClientMessage vs ServerMessage
-
-✅ **Concurrencia**
-- Thread-safe collections
-- Sincronización de sesiones
-
-✅ **Interfaz Gráfica**
-- Swing components
-- Eventos y listeners
-
-✅ **Build Automation**
-- Maven multi-module
-- JAR con dependencias
-
-✅ **Cloud Deployment**
-- Azure VM
-- Port forwarding
-- SSH
-
----
-
-**Última actualización:** 27/11/2025  
-**Estado:** ✅ Documentación Completa

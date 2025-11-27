@@ -1,77 +1,5 @@
 # 🚀 GUÍA PRÁCTICA: SETUP, COMPILACIÓN Y EJECUCIÓN
 
-**Objetivo:** Establecer un ambiente funcional del servidor y cliente paso a paso  
-**Nivel:** Usuarios con conocimientos básicos de programación  
-**Tiempo estimado:** 30-45 minutos  
-
----
-
-## PARTE 1: SETUP DEL AMBIENTE LOCAL
-
-### Paso 1.1: Verificar Java instalado
-
-**Windows (PowerShell):**
-```powershell
-java -version
-javac -version
-```
-
-**Salida esperada:**
-```
-java version "11.0.15" 2021-10-19 LTS
-Java(TM) SE Runtime Environment 18.9 (build 11.0.15+10-LTS)
-Java HotSpot(TM) 64-Bit Server VM 18.9 (build 11.0.15+10-LTS, mixed mode)
-```
-
-**Si NO está instalado:**
-1. Descargar JDK 11 desde: https://www.oracle.com/java/technologies/downloads/#java11
-2. O usar OpenJDK: https://adoptopenjdk.net/
-3. Instalar (dejando opciones por defecto)
-4. Reiniciar PowerShell
-5. Verificar nuevamente
-
-### Paso 1.2: Verificar Maven instalado
-
-```powershell
-mvn -v
-```
-
-**Salida esperada:**
-```
-Apache Maven 3.9.0 (eb52dc87b7ffd866dc77df966e97f23ba142d667; 2023-01-08T16:42:00-05:00)
-Maven home: C:\apache-maven-3.9.0
-Java version: 11.0.15
-```
-
-**Si NO está instalado:**
-1. Descargar Maven desde: https://maven.apache.org/download.cgi
-2. Descargar ZIP (no instalador)
-3. Extraer en `C:\apache-maven` (sin espacios)
-4. Agregar a PATH:
-   - Windows + R
-   - `systempropertiesadvanced` (Variables de Entorno)
-   - Nueva variable: `MAVEN_HOME = C:\apache-maven`
-   - Editar PATH: Agregar `%MAVEN_HOME%\bin`
-5. Reiniciar PowerShell
-6. Verificar nuevamente
-
-### Paso 1.3: Configurar JAVA_HOME (si falta)
-
-**Windows (PowerShell):**
-```powershell
-# Buscar dónde está JDK
-$env:JAVA_HOME
-# Si no sale nada, configurar:
-$env:JAVA_HOME = "C:\Program Files\Java\jdk-11"
-
-# Verificar
-echo $env:JAVA_HOME
-
-# Hacer permanente (Admin):
-[Environment]::SetEnvironmentVariable("JAVA_HOME", "C:\Program Files\Java\jdk-11", "Machine")
-```
-
----
 
 ## PARTE 2: DESCARGAR Y PREPARAR PROYECTO
 
@@ -509,4 +437,3 @@ tail -f /home/azureuser/server.log
 
 ---
 
-**Documentación:** 27/11/2025

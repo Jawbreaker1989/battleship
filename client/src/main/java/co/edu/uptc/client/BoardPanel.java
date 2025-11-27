@@ -78,13 +78,16 @@ public class BoardPanel extends JPanel {
             public void mouseClicked(MouseEvent e) {
                 Position pos = getPositionFromMouse(e);
                 if (pos != null) {
+                    int x = pos.getX();
+                    int y = pos.getY();
+                    
                     if (isMyBoard && !attackMode) {
                         // Modo colocación de barcos en mi tablero
-                        tryPlaceShip(pos.getX(), pos.getY());
-                    } else if (!isMyBoard) {
-                        // Permitir intento de ataque siempre; servidor valida turno.
-                        if (board[pos.getX()][pos.getY()] == CellState.UNKNOWN) {
-                            parentWindow.onEnemyCellClicked(pos.getX(), pos.getY());
+                        tryPlaceShip(x, y);
+                    } else if (!isMyBoard && attackMode) {
+                        // Modo ataque - solo si está habilitado el modo ataque
+                        if (board[y][x] == CellState.UNKNOWN) {
+                            parentWindow.onEnemyCellClicked(x, y);
                         } else {
                             parentWindow.showMessage("Celda ya atacada");
                         }
@@ -153,12 +156,15 @@ public class BoardPanel extends JPanel {
     
     private void tryPlaceShip(int x, int y) {
         if (!isMyBoard || allShipsPlaced()) {
+            parentWindow.showMessage("❌ No se pueden colocar más barcos o no es tu tablero");
             return;
         }
         
         int shipSize = shipSizes[currentShipIndex];
         if (!canPlaceShip(x, y, shipSize, isHorizontal)) {
-            parentWindow.showMessage("❌ No se puede colocar el barco aquí");
+            String orientacion = isHorizontal ? "horizontal" : "vertical";
+            parentWindow.showMessage("❌ No se puede colocar barco " + shipSize + " de forma " + orientacion + 
+                                   " en (" + x + "," + y + "). Presiona botón para cambiar dirección.");
             return;
         }
 
@@ -182,9 +188,16 @@ public class BoardPanel extends JPanel {
         placeShip(x, y, shipSize, isHorizontal);
         shipsPlaced++;
         currentShipIndex++;
-        parentWindow.showMessage("✅ Barco colocado! " +
-            (allShipsPlaced() ? "Todos los barcos listos!" :
-            "Siguiente: " + (shipSizes.length - shipsPlaced) + " barcos restantes"));
+        
+        String mensaje = "✅ Barco de tamaño " + shipSize + " colocado! ";
+        if (allShipsPlaced()) {
+            mensaje += "¡Todos los barcos listos! Haz clic en '¡LISTO PARA JUGAR!' cuando estés preparado.";
+        } else {
+            int restantes = shipSizes.length - shipsPlaced;
+            int siguienteTamaño = shipSizes[currentShipIndex];
+            mensaje += "Siguiente: barco de tamaño " + siguienteTamaño + " (" + restantes + " restantes)";
+        }
+        parentWindow.showMessage(mensaje);
         repaint();
     }
     
@@ -201,7 +214,8 @@ public class BoardPanel extends JPanel {
             int checkX = horizontal ? x + i : x;
             int checkY = horizontal ? y : y + i;
             
-            if (board[checkX][checkY] == CellState.SHIP) {
+            // Usar índices correctos [fila][columna] = [y][x]
+            if (board[checkY][checkX] == CellState.SHIP) {
                 return false;
             }
             
@@ -212,7 +226,8 @@ public class BoardPanel extends JPanel {
                     int adjY = checkY + dy;
                     
                     if (adjX >= 0 && adjX < BOARD_SIZE && adjY >= 0 && adjY < BOARD_SIZE) {
-                        if (board[adjX][adjY] == CellState.SHIP) {
+                        // Usar índices correctos [fila][columna] = [y][x]
+                        if (board[adjY][adjX] == CellState.SHIP) {
                             return false;
                         }
                     }
@@ -227,7 +242,8 @@ public class BoardPanel extends JPanel {
         for (int i = 0; i < size; i++) {
             int shipX = horizontal ? x + i : x;
             int shipY = horizontal ? y : y + i;
-            board[shipX][shipY] = CellState.SHIP;
+            // Usar índices correctos [fila][columna] = [y][x]
+            board[shipY][shipX] = CellState.SHIP;
         }
     }
     

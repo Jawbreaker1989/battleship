@@ -75,12 +75,17 @@ public class GameServiceWebSocket {
             playerToSession.put(playerId, gameSession);
             LOGGER.info("Player " + playerName + " (" + playerId + ") joined");
 
-            // Send initial notification asynchronously - MEJORADO
+            // Verificar si se acaba de completar la sesión (dos jugadores conectados)
+            if (gameSession.isFull()) {
+                LOGGER.info("Session is now full. Notifying both players.");
+                // Notificar que se completo la conexión de ambos
+                gameSession.notifyBothJoined();
+            }
+
+            // Send initial notification asynchronously
             callbackExecutor.execute(() -> {
                 try {
-                    Thread.sleep(100); // Optimizado: reducido de 200ms a 100ms
-                    // El estado actual ya fue enviado por GameSession.addPlayer
-                    // Aquí solo confirmamos la conexión
+                    Thread.sleep(100);
                     sendToPlayer(playerId, ServerMessage.gameEvent("✓ Conectado al servidor"));
                 } catch (Exception ignored) {
                 }
