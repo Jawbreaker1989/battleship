@@ -113,18 +113,24 @@ public class GameSession {
             return null;
         }
 
+        // Validar límites de posición
+        if (target.getX() < 0 || target.getX() >= 10 || target.getY() < 0 || target.getY() >= 10) {
+            notifyPlayer(attacker, "⚠️ Posición fuera del tablero (" + target + ")");
+            return null;
+        }
+
         // Usar método extendido para obtener información del barco hundido
         Board.ExtendedAttackResult extendedResult = defender.getBoard().receiveAttackExtended(target);
         Board.AttackResult result = extendedResult.getResult();
 
-        // Si ya fue atacada, rechazar el intento
+        // Si ya fue atacada, rechazar el intento (sin cambiar turno)
         if (result == Board.AttackResult.ALREADY_ATTACKED) {
-            notifyPlayer(attacker, "⚠️ Ya atacaste esa posición (" + target + ")");
+            notifyPlayer(attacker, "⚠️ Ya atacaste esa posición (" + target + "). Intenta otro lugar.");
             return result;
         }
 
         // Trackear estadísticas del atacante
-        attacker.recordShotMade(result != Board.AttackResult.ALREADY_ATTACKED);
+        attacker.recordShotMade(true);
 
         // Si se hundió un barco, trackear estadísticas
         if ((result == Board.AttackResult.SUNK || result == Board.AttackResult.SUNK_AND_GAME_OVER)
@@ -132,9 +138,29 @@ public class GameSession {
             attacker.recordShipDestroyed(extendedResult.getSunkShip().getSize());
         }
 
-        // Notificaciones textuales básicas
-        notifyPlayer(attacker, "💥 Atacaste " + target + ": " + result.getDescription());
-        notifyPlayer(defender, "🎯 " + attacker.getName() + " atacó " + target + ": " + result.getDescription());
+        // Notificaciones textuales con emojis
+        switch (result) {
+            case HIT:
+                notifyPlayer(attacker, "🎯 ¡IMPACTO! Atacaste " + target + " - golpe acertado");
+                notifyPlayer(defender, "💥 ¡IMPACTO! " + attacker.getName() + " te atacó en " + target);
+                break;
+            case MISS:
+                notifyPlayer(attacker, "💦 Agua. Atacaste " + target + " - agua pura");
+                notifyPlayer(defender, "🛡️ Agua. " + attacker.getName() + " atacó " + target + " y falló");
+                break;
+            case SUNK:
+                notifyPlayer(attacker, "☠️ ¡BARCO HUNDIDO! Hundiste un barco en " + target);
+                notifyPlayer(defender, "🔥 ¡HUNDIDO! Perdiste un barco en " + target);
+                break;
+            case SUNK_AND_GAME_OVER:
+                notifyPlayer(attacker, "⚔️ ¡VICTORIA! ¡Hundiste el último barco en " + target + "!");
+                notifyPlayer(defender, "💀 DERROTA: Perdiste el último barco en " + target);
+                break;
+            case ALREADY_ATTACKED:
+                // Este caso ya se manejó antes
+                break;
+        }
+
         // Callback estructurado para pintar en clientes
         sendAttackStructured(attacker, defender, target, result);
 
@@ -144,18 +170,23 @@ public class GameSession {
             attacker.endGame(true); // ganador
             defender.endGame(false); // perdedor
 
-            // Notificar fin del juego a ambos jugadores con callback
+            // Notificar fin del juego a ambos jugadores
             notifyGameEnded(attacker.getName());
-            notifyBothPlayers("¡" + attacker.getName() + " GANA!");
+            notifyBothPlayers("🏆 ¡" + attacker.getName() + " HA GANADO!");
+            
+            LOGGER.info("GAME OVER: " + attacker.getName() + " won against " + defender.getName());
             return result;
         }
         
-        // Reglas clásicas: Sólo cambia turno con MISS.
+        // Reglas clásicas de Batalla Naval:
+        // - Con HIT o SUNK (no game over): el atacante continúa su turno
+        // - Con MISS: el turno cambia al otro jugador
         if (result == Board.AttackResult.MISS) {
             switchTurn();
         } else {
-            // Si fue HIT o SUNK pero el juego no terminó, el atacante continúa
-            notifyPlayer(attacker, "✓ ¡Golpe acertado! Tu turno continúa...");
+            // HIT o SUNK (no game over) - el atacante mantiene su turno
+            notifyPlayer(attacker, "⚡ ¡Golpe acertado! Tu turno continúa...");
+            sendStatusUpdate(attacker, "⚡ Continúa tu turno - ¡vuelve a atacar!");
         }
         
         return result;

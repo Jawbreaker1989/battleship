@@ -62,10 +62,11 @@ public class BoardPanel extends JPanel {
     private void initializeBoard() {
         for (int x = 0; x < BOARD_SIZE; x++) {
             for (int y = 0; y < BOARD_SIZE; y++) {
+                // Usar índices correctos: board[fila][columna] = board[y][x]
                 if (isMyBoard) {
-                    board[x][y] = CellState.WATER;  // Mi tablero empieza vacío
+                    board[y][x] = CellState.WATER;  // Mi tablero empieza vacío
                 } else {
-                    board[x][y] = CellState.UNKNOWN; // Tablero enemigo desconocido
+                    board[y][x] = CellState.UNKNOWN; // Tablero enemigo desconocido
                 }
             }
         }
@@ -109,14 +110,25 @@ public class BoardPanel extends JPanel {
         int x = target.getX();
         int y = target.getY();
         
-        if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
-            if (result.contains("HIT") || result.contains("SUNK")) {
-                board[x][y] = CellState.HIT;
-            } else if (result.contains("MISS")) {
-                board[x][y] = CellState.MISS;
-            }
-            repaint();
+        // Validación de límites
+        if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) {
+            System.err.println("ERROR: Ataque fuera de límites - X:" + x + ", Y:" + y);
+            return;
         }
+        
+        // Usar índices correctos [fila][columna] = [y][x]
+        if (result.contains("HIT") || result.contains("Impacto")) {
+            board[y][x] = CellState.HIT;
+        } else if (result.contains("SUNK") || result.contains("hundido")) {
+            board[y][x] = CellState.HIT; // Barco hundido también se marca como impacto
+        } else if (result.contains("MISS") || result.contains("Agua")) {
+            board[y][x] = CellState.MISS;
+        } else if (result.contains("ALREADY_ATTACKED") || result.contains("Ya atacado")) {
+            // No cambiar estado, ya fue marcado
+            return;
+        }
+        
+        repaint();
     }
     
     public void setAttackMode(boolean enabled) {
@@ -239,14 +251,15 @@ public class BoardPanel extends JPanel {
     private void drawCells(Graphics2D g2d) {
         for (int x = 0; x < BOARD_SIZE; x++) {
             for (int y = 0; y < BOARD_SIZE; y++) {
-                Color cellColor = getCellColor(board[x][y]);
+                // Usar índices correctos: board[fila][columna] = board[y][x]
+                Color cellColor = getCellColor(board[y][x]);
                 
                 g2d.setColor(cellColor);
                 g2d.fillRect(x * CELL_SIZE + 1, y * CELL_SIZE + 1, 
                            CELL_SIZE - 1, CELL_SIZE - 1);
                 
                 // Agregar símbolo visual
-                drawCellSymbol(g2d, x, y, board[x][y]);
+                drawCellSymbol(g2d, x, y, board[y][x]);
             }
         }
     }
