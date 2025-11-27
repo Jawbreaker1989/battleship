@@ -26,26 +26,68 @@ public class GameSession {
 
     // Añade un jugador a la sesión
     public synchronized boolean addPlayer(Player player) {
+        boolean wasFull = isFull();
+
         if (player1 == null) {
             player1 = player;
-            notifyPlayer(player, "Esperando segundo jugador...");
-            sendStatusUpdate(player, "Esperando oponente...");
-            return true;
         } else if (player2 == null) {
             player2 = player;
+        } else {
+            return false; // Sesión llena
+        }
+
+        // Si ahora está llena y antes no lo estaba, iniciar fase de colocación
+        if (isFull() && !wasFull) {
             phase = GameStatus.GamePhase.PLACING_SHIPS;
-            
-            // Notificar a ambos jugadores que pueden comenzar
+
+            // Notificar a ambos jugadores
             notifyPlayer(player1, "¡Jugador conectado! " + player2.getName() + " se ha unido. ¡Coloca tus barcos!");
             notifyPlayer(player2, "¡Conectado contra: " + player1.getName() + "! ¡Coloca tus barcos!");
             notifyBothPlayers("¡Fase de colocación de barcos iniciada!");
 
-            // Send status update to both players - ACTUALIZADO PARA AMBOS
             sendStatusUpdate(player1, "Oponente conectado: " + player2.getName() + ". Coloca tus barcos");
             sendStatusUpdate(player2, "Jugando contra: " + player1.getName() + ". Coloca tus barcos");
-            return true;
+        } else if (player1 != null && player2 == null) {
+            // Solo hay un jugador (el primero)
+            notifyPlayer(player1, "Esperando segundo jugador...");
+            sendStatusUpdate(player1, "Esperando oponente...");
+        } else if (player1 == null && player2 != null) {
+            // Caso raro: player1 se fue, player2 quedó esperando
+            // El nuevo player entró como player1
+            // Invertimos roles para mantener lógica o simplemente iniciamos
+            // Al entrar en el primer if, player1 ya se asignó.
+            // Así que ahora isFull() es true.
+            // Este bloque else if no se alcanzará si isFull() es true.
         }
-        return false; // Sesión llena
+
+        return true;
+    }
+
+    public synchronized void removePlayer(String playerId) {
+        if (player1 != null && player1.getId().equals(playerId)) {
+            player1 = null;
+            // Si queda player2 solo, notificarle
+            if (player2 != null) {
+                notifyPlayer(player2, "El oponente se ha desconectado. Esperando nuevo jugador...");
+                sendStatusUpdate(player2, "Esperando oponente...");
+                // Resetear fase si estaba en placing ships
+                if (phase == GameStatus.GamePhase.PLACING_SHIPS) {
+                    phase = GameStatus.GamePhase.WAITING;
+                    player2.setReady(false); // Reset ready status
+                }
+            }
+        } else if (player2 != null && player2.getId().equals(playerId)) {
+            player2 = null;
+            // Si queda player1 solo, notificarle
+            if (player1 != null) {
+                notifyPlayer(player1, "El oponente se ha desconectado. Esperando nuevo jugador...");
+                sendStatusUpdate(player1, "Esperando oponente...");
+                if (phase == GameStatus.GamePhase.PLACING_SHIPS) {
+                    phase = GameStatus.GamePhase.WAITING;
+                    player1.setReady(false);
+                }
+            }
+        }
     }
 
     // Coloca un barco para un jugador con validación de tamaño disponible
@@ -173,11 +215,11 @@ public class GameSession {
             // Notificar fin del juego a ambos jugadores
             notifyGameEnded(attacker.getName());
             notifyBothPlayers("🏆 ¡" + attacker.getName() + " HA GANADO!");
-            
+
             LOGGER.info("GAME OVER: " + attacker.getName() + " won against " + defender.getName());
             return result;
         }
-        
+
         // Reglas clásicas de Batalla Naval:
         // - Con HIT o SUNK (no game over): el atacante continúa su turno
         // - Con MISS: el turno cambia al otro jugador
@@ -188,7 +230,7 @@ public class GameSession {
             notifyPlayer(attacker, "⚡ ¡Golpe acertado! Tu turno continúa...");
             sendStatusUpdate(attacker, "⚡ Continúa tu turno - ¡vuelve a atacar!");
         }
-        
+
         return result;
     }
 
@@ -251,20 +293,20 @@ public class GameSession {
         if (waiter != null) {
             sendStatusUpdate(waiter, "🛡️ Turno del oponente (" + (starter != null ? starter.getName() : "?") + ")");
         }
-        
+
         LOGGER.info("Game started in session " + sessionId + ". Current turn: " + currentTurn);
     }
 
     private void switchTurn() {
         String previousTurn = currentTurn;
         currentTurn = currentTurn.equals(player1.getId()) ? player2.getId() : player1.getId();
-        
+
         Player current = getPlayer(currentTurn);
         Player previous = getPlayer(previousTurn);
-        
+
         // Notificación de cambio de turno
         notifyBothPlayers("🔄 Cambio de turno: " + current.getName() + " ahora ataca");
-        
+
         // Enviar statusUpdate personalizado a cada jugador
         if (current != null) {
             sendStatusUpdate(current, "¡ES TU TURNO! Ataca al enemigo");
@@ -272,7 +314,7 @@ public class GameSession {
         if (previous != null) {
             sendStatusUpdate(previous, "⏳ Turno del oponente (" + current.getName() + ")");
         }
-        
+
         LOGGER.info("Turn switched from " + previous.getName() + " to " + current.getName());
     }
 

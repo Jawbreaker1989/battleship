@@ -156,7 +156,10 @@ public class GameServiceWebSocket {
         Player player = players.get(playerId);
         if (player != null) {
             players.remove(playerId);
-            playerToSession.remove(playerId);
+            GameSession session = playerToSession.remove(playerId);
+            if (session != null) {
+                session.removePlayer(playerId);
+            }
             playerLastSeen.remove(playerId);
 
             LOGGER.info("Player " + player.getName() + " disconnected");
