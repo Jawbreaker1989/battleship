@@ -37,7 +37,7 @@ echo.
 
 REM Verificar proceso Java
 echo [2] Verificando si servidor Java está corriendo...
-ssh %AZURE_USER%@%AZURE_HOST% "ps aux | grep -i battleship-server | grep -v grep" >nul 2>&1
+ssh %AZURE_USER%@%AZURE_HOST% "pgrep -f battleship-server" >nul 2>&1
 
 if errorlevel 1 (
     echo ❌ Servidor NO está ejecutándose
@@ -52,7 +52,7 @@ if errorlevel 1 (
 
 echo.
 echo [3] Verificando puerto %AZURE_PORT%...
-ssh %AZURE_USER%@%AZURE_HOST% "netstat -tlnp 2>/dev/null | grep %AZURE_PORT% || ss -tlnp 2>/dev/null | grep %AZURE_PORT%" >nul 2>&1
+ssh %AZURE_USER%@%AZURE_HOST% "ss -tlnp 2>/dev/null | grep :%AZURE_PORT%" >nul 2>&1
 
 if errorlevel 1 (
     echo ⚠️  Puerto %AZURE_PORT% no está escuchando (puede estar iniciando)

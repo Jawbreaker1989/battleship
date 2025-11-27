@@ -49,7 +49,7 @@ Write-Host ""
 # Verificar proceso Java
 Write-Host "[2] Verificando si servidor Java está corriendo..." -ForegroundColor Yellow
 
-$process = & sshpass -p "$Password" ssh -o StrictHostKeyChecking=no "$AZURE_USER@$AZURE_HOST" 'ps aux | grep -i battleship-server | grep -v grep' 2>&1
+$process = & sshpass -p "$Password" ssh -o StrictHostKeyChecking=no "$AZURE_USER@$AZURE_HOST" 'pgrep -f battleship-server' 2>&1
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Servidor NO está ejecutándose" -ForegroundColor Red
@@ -64,7 +64,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 Write-Host "[3] Verificando puerto $AZURE_PORT..." -ForegroundColor Yellow
 
-$port = & sshpass -p "$Password" ssh -o StrictHostKeyChecking=no "$AZURE_USER@$AZURE_HOST" "netstat -tlnp 2>/dev/null | grep $AZURE_PORT || ss -tlnp 2>/dev/null | grep $AZURE_PORT" 2>&1
+$port = & sshpass -p "$Password" ssh -o StrictHostKeyChecking=no "$AZURE_USER@$AZURE_HOST" "ss -tlnp 2>/dev/null | grep :$AZURE_PORT" 2>&1
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "⚠️  Puerto $AZURE_PORT no está escuchando (puede estar iniciando)" -ForegroundColor Yellow

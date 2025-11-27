@@ -59,12 +59,10 @@ Write-Host ""
 Write-Host "[3] Deteniendo servidor anterior (si existe)..." -ForegroundColor Yellow
 
 if ($sshpass) {
-    & sshpass -p "$Password" ssh -o StrictHostKeyChecking=no "$AZURE_USER@$AZURE_HOST" "pkill -f battleship-server || true" 2>&1
+    & sshpass -p "$Password" ssh -o StrictHostKeyChecking=no "$AZURE_USER@$AZURE_HOST" "pkill -9 -f battleship-server 2>/dev/null; sleep 1" 2>&1
 } else {
-    & ssh "$AZURE_USER@$AZURE_HOST" "pkill -f battleship-server || true" 2>&1
+    & ssh "$AZURE_USER@$AZURE_HOST" "pkill -9 -f battleship-server 2>/dev/null; sleep 1" 2>&1
 }
-
-Start-Sleep -Seconds 2
 
 Write-Host "✓ Limpio" -ForegroundColor Green
 Write-Host ""
@@ -83,9 +81,9 @@ Write-Host ""
 Write-Host "[5] Verificando que servidor está corriendo..." -ForegroundColor Yellow
 
 if ($sshpass) {
-    $process = & sshpass -p "$Password" ssh -o StrictHostKeyChecking=no "$AZURE_USER@$AZURE_HOST" "ps aux | grep -i battleship-server | grep -v grep" 2>&1
+    $process = & sshpass -p "$Password" ssh -o StrictHostKeyChecking=no "$AZURE_USER@$AZURE_HOST" "pgrep -f battleship-server" 2>&1
 } else {
-    $process = & ssh "$AZURE_USER@$AZURE_HOST" "ps aux | grep -i battleship-server | grep -v grep" 2>&1
+    $process = & ssh "$AZURE_USER@$AZURE_HOST" "pgrep -f battleship-server" 2>&1
 }
 
 if ($LASTEXITCODE -ne 0) {

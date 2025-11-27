@@ -50,8 +50,7 @@ echo ✓ Transferencia exitosa
 echo.
 
 echo [3] Deteniendo servidor anterior (si existe)...
-ssh "%AZURE_USER%@%AZURE_HOST%" "pkill -f battleship-server || true"
-timeout /t 2 /nobreak
+ssh "%AZURE_USER%@%AZURE_HOST%" "pkill -9 -f battleship-server 2>/dev/null; sleep 1"
 
 echo ✓ Limpio
 echo.
@@ -64,7 +63,7 @@ timeout /t 3 /nobreak
 echo.
 
 echo [5] Verificando que servidor está corriendo...
-ssh "%AZURE_USER%@%AZURE_HOST%" "ps aux | grep -i battleship-server | grep -v grep"
+ssh "%AZURE_USER%@%AZURE_HOST%" "pgrep -f battleship-server"
 
 if errorlevel 1 (
     echo ❌ Servidor no se inició correctamente
