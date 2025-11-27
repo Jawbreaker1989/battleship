@@ -75,11 +75,13 @@ public class GameServiceWebSocket {
             playerToSession.put(playerId, gameSession);
             LOGGER.info("Player " + playerName + " (" + playerId + ") joined");
 
-            // Send initial notification asynchronously
+            // Send initial notification asynchronously - MEJORADO
             callbackExecutor.execute(() -> {
                 try {
-                    Thread.sleep(500);
-                    sendToPlayer(playerId, ServerMessage.gameEvent("Conectado al servidor. Esperando oponente..."));
+                    Thread.sleep(200); // Reducido el delay
+                    // El estado actual ya fue enviado por GameSession.addPlayer
+                    // Aquí solo confirmamos la conexión
+                    sendToPlayer(playerId, ServerMessage.gameEvent("✓ Conectado al servidor"));
                 } catch (Exception ignored) {
                 }
             });

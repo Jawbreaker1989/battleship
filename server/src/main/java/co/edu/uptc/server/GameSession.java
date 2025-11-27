@@ -34,13 +34,15 @@ public class GameSession {
         } else if (player2 == null) {
             player2 = player;
             phase = GameStatus.GamePhase.PLACING_SHIPS;
-            notifyPlayer(player1, "Jugador 2 conectado: " + player2.getName());
-            notifyPlayer(player2, "Conectado contra: " + player1.getName());
-            notifyBothPlayers("¡Coloquen sus barcos!");
+            
+            // Notificar a ambos jugadores que pueden comenzar
+            notifyPlayer(player1, "¡Jugador conectado! " + player2.getName() + " se ha unido. ¡Coloca tus barcos!");
+            notifyPlayer(player2, "¡Conectado contra: " + player1.getName() + "! ¡Coloca tus barcos!");
+            notifyBothPlayers("¡Fase de colocación de barcos iniciada!");
 
-            // Send status update to both players
-            sendStatusUpdate(player1, "¡Prepárense para batalla! Coloca tus barcos");
-            sendStatusUpdate(player2, "¡Prepárense para batalla! Coloca tus barcos");
+            // Send status update to both players - ACTUALIZADO PARA AMBOS
+            sendStatusUpdate(player1, "Oponente conectado: " + player2.getName() + ". Coloca tus barcos");
+            sendStatusUpdate(player2, "Jugando contra: " + player1.getName() + ". Coloca tus barcos");
             return true;
         }
         return false; // Sesión llena
@@ -196,15 +198,19 @@ public class GameSession {
         Player starter = getPlayer(currentTurn);
         Player waiter = getOpponent(currentTurn);
 
-        notifyBothPlayers("¡Juego iniciado! " + (starter != null ? starter.getName() : "?") + " ataca primero.");
+        // Mensajes claros de inicio del juego
+        String startMessage = "¡JUEGO INICIADO! " + (starter != null ? starter.getName() : "?") + " ataca primero.";
+        notifyBothPlayers(startMessage);
 
-        // Send status updates to both players
+        // Send personalized status updates to both players
         if (starter != null) {
-            sendStatusUpdate(starter, "¡Tu turno! Ataca al enemigo");
+            sendStatusUpdate(starter, "¡ES TU TURNO! Ataca al enemigo en su tablero");
         }
         if (waiter != null) {
-            sendStatusUpdate(waiter, "Turno de " + (starter != null ? starter.getName() : "oponente"));
+            sendStatusUpdate(waiter, "🛡️ Turno del oponente (" + (starter != null ? starter.getName() : "?") + ")");
         }
+        
+        LOGGER.info("Game started in session " + sessionId + ". Current turn: " + currentTurn);
     }
 
     private void switchTurn() {
