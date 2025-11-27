@@ -31,6 +31,11 @@ public class GameWebSocketClient {
         LOGGER.info("Connecting to WebSocket server: " + serverUrl);
 
         WebSocketContainer container = ContainerProvider.getWebSocketContainer();
+
+        // Configurar timeouts optimizados para Azure
+        container.setDefaultMaxSessionIdleTimeout(120000L); // 2 minutos
+        container.setDefaultMaxTextMessageBufferSize(8192);
+
         this.session = container.connectToServer(this, new URI(serverUrl));
 
         LOGGER.info("Connected to WebSocket server");
@@ -213,9 +218,10 @@ public class GameWebSocketClient {
 
         try {
             String json = gson.toJson(message);
-            session.getBasicRemote().sendText(json);
+            // Usar envío asíncrono para evitar bloqueos
+            session.getAsyncRemote().sendText(json);
             LOGGER.info("Sent message: " + message.getAction());
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOGGER.severe("Error sending message: " + e.getMessage());
             e.printStackTrace();
         }

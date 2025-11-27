@@ -78,7 +78,7 @@ public class GameServiceWebSocket {
             // Send initial notification asynchronously - MEJORADO
             callbackExecutor.execute(() -> {
                 try {
-                    Thread.sleep(200); // Reducido el delay
+                    Thread.sleep(100); // Optimizado: reducido de 200ms a 100ms
                     // El estado actual ya fue enviado por GameSession.addPlayer
                     // Aquí solo confirmamos la conexión
                     sendToPlayer(playerId, ServerMessage.gameEvent("✓ Conectado al servidor"));
@@ -211,7 +211,7 @@ public class GameServiceWebSocket {
                 }
                 return false;
             });
-        }, 10, 10, TimeUnit.SECONDS);
+        }, 5, 5, TimeUnit.SECONDS); // Optimizado: reducido de 10s a 5s para detección más rápida
     }
 
     private void touchPlayer(String playerId) {

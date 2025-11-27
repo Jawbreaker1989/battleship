@@ -6,7 +6,6 @@ import com.google.gson.Gson;
 
 import javax.websocket.*;
 import javax.websocket.server.ServerEndpoint;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -237,8 +236,9 @@ public class GameWebSocketServer {
     private static void sendToSession(Session session, ServerMessage message) {
         try {
             String json = gson.toJson(message);
-            session.getBasicRemote().sendText(json);
-        } catch (IOException e) {
+            // Usar envío asíncrono para evitar bloqueos
+            session.getAsyncRemote().sendText(json);
+        } catch (Exception e) {
             LOGGER.severe("Error sending message to session " + session.getId() + ": " + e.getMessage());
         }
     }
