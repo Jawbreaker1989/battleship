@@ -440,6 +440,21 @@ public class GameWindow extends JFrame {
     public void updateStatus(String status) {
         SwingUtilities.invokeLater(() -> {
             statusLabel.setText(status);
+            
+            // Cambiar color del status según el contenido
+            if (status.contains("Esperando") || status.contains("esperando")) {
+                statusLabel.setForeground(new Color(255, 165, 0)); // Naranja
+            } else if (status.contains("Coloca") || status.contains("colocación")) {
+                statusLabel.setForeground(new Color(0, 100, 200)); // Azul
+            } else if (status.contains("¡ES TU TURNO!") || status.contains("Continúa tu turno")) {
+                statusLabel.setForeground(Color.GREEN); // Verde
+            } else if (status.contains("Turno del oponente") || status.contains("⏳")) {
+                statusLabel.setForeground(Color.RED); // Rojo
+            } else if (status.contains("Ganador") || status.contains("VICTORIA")) {
+                statusLabel.setForeground(new Color(0, 200, 0)); // Verde brillante
+            } else {
+                statusLabel.setForeground(Color.BLACK); // Negro por defecto
+            }
         });
     }
 

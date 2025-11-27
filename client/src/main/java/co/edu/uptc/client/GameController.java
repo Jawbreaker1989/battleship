@@ -80,12 +80,18 @@ public class GameController {
             gameWindow.updateStatus(status);
             gameWindow.showMessage(status);
             
-            // Detectar cambio de turno automáticamente desde el status
-            if (status.contains("¡ES TU TURNO!")) {
+            // Detectar cambios de fase desde el status
+            if (status.contains("Coloca tus barcos") || status.contains("colocación")) {
+                // Fase de colocación de barcos
+                isMyTurn = false;
+                gameWindow.updateGameControls(true, false, false);
+            } else if (status.contains("¡ES TU TURNO!")) {
+                // Es mi turno de atacar
                 isMyTurn = true;
                 gameWindow.setTurnIndicator(true);
                 gameWindow.updateGameControls(true, false, true);
             } else if (status.contains("Turno del oponente") || status.contains("⏳")) {
+                // Es turno del oponente
                 isMyTurn = false;
                 gameWindow.setTurnIndicator(false);
                 gameWindow.updateGameControls(true, false, false);
