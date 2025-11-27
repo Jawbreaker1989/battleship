@@ -51,18 +51,20 @@ public class ClientMain {
                 System.setProperty("sun.rmi.transport.tcp.responseTimeout", "10000");
                 System.setProperty("sun.rmi.transport.tcp.readTimeout", "10000");
 
-                // IMPORTANTE: Solo configurar java.rmi.server.hostname si es conexión remota
-                // (no localhost)
-                // Esto permite que el servidor sepa cómo conectar de vuelta al cliente para
-                // callbacks
-                if (!host.equals("localhost") && !host.equals("127.0.0.1")) {
+                // IMPORTANTE: Configuración de hostname para RMI
+                // Si conectamos a localhost (túnel SSH), DEBEMOS decir que somos localhost
+                // para que el servidor nos encuentre por el túnel inverso (-R).
+                if (host.equals("localhost") || host.equals("127.0.0.1")) {
+                    System.setProperty("java.rmi.server.hostname", "localhost");
+                    LOGGER.info("Configurado hostname RMI a 'localhost' para túnel SSH");
+                } else {
+                    // Lógica original para conexión directa (sin túnel)
                     try {
                         String localIp = java.net.InetAddress.getLocalHost().getHostAddress();
                         System.setProperty("java.rmi.server.hostname", localIp);
                         LOGGER.info("Configurado hostname RMI del cliente para callbacks remoto: " + localIp);
                     } catch (Exception e) {
-                        LOGGER.warning(
-                                "No se pudo detectar IP local, usando configuración por defecto: " + e.getMessage());
+                        LOGGER.warning("No se pudo detectar IP local: " + e.getMessage());
                     }
                 }
 
